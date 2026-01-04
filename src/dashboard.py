@@ -10,6 +10,7 @@ from flask import (
     Flask,
     redirect,
     render_template_string,
+    render_template,
     request,
     url_for,
     send_file,
@@ -30,7 +31,7 @@ except Exception:  # pragma: no cover
         return 0
 
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 
 TASKS: list[dict] = []
 TASK_LOCK = threading.Lock()
@@ -1070,30 +1071,50 @@ def index():
             card_query, card_set.lower() if card_set else None, c_limit, card_include
         )
 
-    # Quick open defaults
-    base = os.path.join(
-        create_pdf.project_root_directory, "magic-the-gathering", "shared"
-    )
-    return render_template_string(
-        INDEX_TEMPLATE,
-        tasks=TASKS,
-        tokens=tokens,
-        tokens_kw=tokens_kw,
-        cards=cards,
-        api_base=f"http://{request.host}",
-        card_query=card_query,
-        card_set=card_set,
-        c_limit=c_limit,
-        card_include=card_include,
-        token_name=token_name,
-        token_set=token_set,
-        name=request.args.get("name"),
-        limit=request.args.get("limit"),
-        set_code=request.args.get("set"),
-        shared_token_packs=os.path.join(base, "token-packs"),
-        reports_land=os.path.join(base, "reports", "land-coverage"),
-        reports_token=os.path.join(base, "reports", "token-coverage"),
-    )
+    # Try to use new template file, fall back to inline template if it doesn't exist
+    try:
+        return render_template(
+            "index.html",
+            tasks=TASKS,
+            tokens=tokens,
+            tokens_kw=tokens_kw,
+            cards=cards,
+            api_base=f"http://{request.host}",
+            card_query=card_query,
+            card_set=card_set,
+            c_limit=c_limit,
+            card_include=card_include,
+            token_name=token_name,
+            token_set=token_set,
+            name=request.args.get("name"),
+            limit=request.args.get("limit"),
+            set_code=request.args.get("set"),
+        )
+    except Exception:
+        # Fallback to old inline template for backward compatibility
+        base = os.path.join(
+            create_pdf.project_root_directory, "magic-the-gathering", "shared"
+        )
+        return render_template_string(
+            INDEX_TEMPLATE,
+            tasks=TASKS,
+            tokens=tokens,
+            tokens_kw=tokens_kw,
+            cards=cards,
+            api_base=f"http://{request.host}",
+            card_query=card_query,
+            card_set=card_set,
+            c_limit=c_limit,
+            card_include=card_include,
+            token_name=token_name,
+            token_set=token_set,
+            name=request.args.get("name"),
+            limit=request.args.get("limit"),
+            set_code=request.args.get("set"),
+            shared_token_packs=os.path.join(base, "token-packs"),
+            reports_land=os.path.join(base, "reports", "land-coverage"),
+            reports_token=os.path.join(base, "reports", "token-coverage"),
+        )
 
 
 @app.route("/run", methods=["POST"])

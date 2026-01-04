@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="{
+    selectedProfile: '',
+    selectedDeck: '',
+    showAdvanced: false,
+    message: '',
+    messageType: '',
+
+    showMessage(text, type) {
+        this.message = text;
+        this.messageType = type;
+        setTimeout(() => { this.message = ''; }, 5000);
+    }
+}" class="space-y-6">
+
+    <!-- Alert Messages -->
+    <div x-show="message" x-cloak
+         :class="messageType === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'"
+         class="rounded-lg border p-4 shadow-sm">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg x-show="messageType === 'success'" class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <svg x-show="messageType === 'error'" class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm font-medium" x-text="message"></p>
+            </div>
+            <div class="ml-auto pl-3">
+                <button @click="message = ''" class="inline-flex rounded-md p-1.5 hover:bg-gray-100">
+                    <span class="sr-only">Dismiss</span>
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Grid -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Profile & Deck Management -->
+        <div class="lg:col-span-2">
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-900">Profile & Deck Management</h2>
+                    <p class="mt-1 text-sm text-gray-600">Manage your proxy card collections</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Profile Selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Profile</label>
+                        <select id="profileSelect" x-model="selectedProfile"
+                                @change="loadDecks()"
+                                hx-get="/api/profiles"
+                                hx-trigger="load"
+                                hx-target="this"
+                                hx-swap="innerHTML"
+                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 text-base">
+                            <option value="">Loading profiles...</option>
+                        </select>
+                    </div>
+
+                    <!-- Deck List -->
+                    <div id="deckList"
+                         hx-get="/api/profiles/{profile}/decks"
+                         hx-trigger="load from:body delay:100ms"
+                         hx-target="this"
+                         class="rounded-lg border border-gray-200 p-4 bg-gray-50 min-h-[200px]">
+                        <p class="text-sm text-gray-500">Select a profile to view decks</p>
+                    </div>
+
+                    <!-- Create New Deck -->
+                    <div class="flex gap-3">
+                        <input type="text" id="newDeckName" placeholder="New deck name..."
+                               class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                        <button @click="createDeck()"
+                                class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors font-medium">
+                            Create Deck
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="space-y-6">
+            <div class="bg-white shadow rounded-lg p-6">
+                <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">System Status</h3>
+                <div class="mt-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Database</span>
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                            Ready
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Scryfall API</span>
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                            Connected
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Background Tasks -->
+            <div class="bg-white shadow rounded-lg p-6">
+                <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Recent Tasks</h3>
+                <div class="space-y-3">
+                    {% for task in tasks[-5:] %}
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-600 truncate">{{ task.name }}</span>
+                        <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium
+                                   {% if task.status == 'completed' %}bg-green-100 text-green-800{% elif task.status == 'running' %}bg-blue-100 text-blue-800{% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ task.status }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Generation -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-50 to-blue-50 px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Generate PDF</h2>
+            <p class="mt-1 text-sm text-gray-600">Create print-ready proxy PDFs</p>
+        </div>
+        <div class="p-6 space-y-6">
+            <!-- Basic Options -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Deck (Optional)</label>
+                    <select id="deckSelect" x-model="selectedDeck"
+                            class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">All cards (no deck filter)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">PDF Name (Optional)</label>
+                    <input type="text" id="pdfName" placeholder="Auto-generated if empty"
+                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <!-- Advanced Options Toggle -->
+            <div>
+                <button @click="showAdvanced = !showAdvanced"
+                        class="flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-700">
+                    <svg :class="showAdvanced ? 'rotate-90' : ''" class="mr-2 h-4 w-4 transform transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span x-text="showAdvanced ? 'Hide' : 'Show'"></span> Advanced Options
+                </button>
+            </div>
+
+            <!-- Advanced Options -->
+            <div x-show="showAdvanced" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Card Size</label>
+                    <select id="cardSize" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        <option value="standard">Standard (2.5" × 3.5")</option>
+                        <option value="poker">Poker</option>
+                        <option value="bridge">Bridge</option>
+                        <option value="tarot">Tarot</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Paper Size</label>
+                    <select id="paperSize" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        <option value="letter">Letter (8.5" × 11")</option>
+                        <option value="a4">A4</option>
+                        <option value="tabloid">Tabloid</option>
+                        <option value="a3">A3</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Crop (mm)</label>
+                    <input type="number" id="crop" value="3.0" step="0.5" min="0" max="10"
+                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">PPI (Quality)</label>
+                    <input type="number" id="ppi" value="600" step="100" min="300" max="1200"
+                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">JPEG Quality</label>
+                    <input type="number" id="quality" value="100" min="50" max="100"
+                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                </div>
+                <div class="flex items-end">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="onlyFronts"
+                               class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <span class="ml-2 text-sm text-gray-700">Only fronts (no backs)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Generate Button -->
+            <div class="flex justify-end">
+                <button @click="generatePDF()"
+                        class="px-8 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all font-semibold shadow-lg">
+                    Generate PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Tools -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Database Sync -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Database Management</h3>
+            <div class="space-y-3">
+                <form method="POST" action="/run">
+                    <input type="hidden" name="action" value="fetch_basics">
+                    <button type="submit"
+                            class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium text-left">
+                        Sync Basic Lands
+                    </button>
+                </form>
+                <form method="POST" action="/run">
+                    <input type="hidden" name="action" value="fetch_nonbasics">
+                    <button type="submit"
+                            class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium text-left">
+                        Sync Non-Basic Lands
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tools -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Tools</h3>
+            <div class="space-y-3">
+                <a href="/coverage"
+                   class="block w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium text-center">
+                    View Coverage Reports
+                </a>
+                <a href="/unique_art"
+                   class="block w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium text-center">
+                    Unique Artwork Explorer
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadProfiles() {
+    fetch('/api/profiles')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('profileSelect');
+            select.innerHTML = '<option value="">Select profile...</option>';
+            data.profiles.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.name;
+                opt.textContent = p.name;
+                select.appendChild(opt);
+            });
+        });
+}
+
+function loadDecks() {
+    const profile = document.getElementById('profileSelect').value;
+    if (!profile) return;
+
+    fetch(`/api/profiles/${profile}/decks`)
+        .then(r => r.json())
+        .then(data => {
+            const list = document.getElementById('deckList');
+            if (data.decks.length === 0) {
+                list.innerHTML = '<p class="text-sm text-gray-500">No decks found. Create one above!</p>';
+            } else {
+                list.innerHTML = '<div class="space-y-2">';
+                data.decks.forEach(deck => {
+                    list.innerHTML += `
+                        <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition-colors">
+                            <span class="font-medium text-gray-900">${deck.name}</span>
+                            <span class="text-sm text-gray-500">${deck.card_count} cards</span>
+                        </div>
+                    `;
+                });
+                list.innerHTML += '</div>';
+            }
+
+            // Update deck select
+            const deckSelect = document.getElementById('deckSelect');
+            deckSelect.innerHTML = '<option value="">All cards (no deck filter)</option>';
+            data.decks.forEach(deck => {
+                deckSelect.innerHTML += `<option value="${deck.name}">${deck.name} (${deck.card_count} cards)</option>`;
+            });
+        });
+}
+
+function createDeck() {
+    const profile = document.getElementById('profileSelect').value;
+    const deckName = document.getElementById('newDeckName').value.trim();
+
+    if (!profile || !deckName) {
+        Alpine.store('app').showMessage('Please select a profile and enter a deck name', 'error');
+        return;
+    }
+
+    fetch(`/api/profiles/${profile}/decks`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({deck_name: deckName})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            Alpine.store('app').showMessage(data.error, 'error');
+        } else {
+            Alpine.store('app').showMessage(`Deck "${deckName}" created!`, 'success');
+            document.getElementById('newDeckName').value = '';
+            loadDecks();
+        }
+    });
+}
+
+function generatePDF() {
+    const profile = document.getElementById('profileSelect').value;
+    if (!profile) {
+        Alpine.store('app').showMessage('Please select a profile first', 'error');
+        return;
+    }
+
+    const payload = {
+        deck: document.getElementById('deckSelect').value || null,
+        pdf_name: document.getElementById('pdfName').value.trim() || null,
+        card_size: document.getElementById('cardSize').value,
+        paper_size: document.getElementById('paperSize').value,
+        crop: parseFloat(document.getElementById('crop').value),
+        ppi: parseInt(document.getElementById('ppi').value),
+        quality: parseInt(document.getElementById('quality').value),
+        only_fronts: document.getElementById('onlyFronts').checked
+    };
+
+    fetch(`/api/profiles/${profile}/pdf`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            Alpine.store('app').showMessage(data.error, 'error');
+        } else {
+            Alpine.store('app').showMessage('PDF generation started! Check tasks below.', 'success');
+            setTimeout(() => location.reload(), 2000);
+        }
+    });
+}
+
+// Load profiles on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadProfiles();
+});
+</script>
+{% endblock %}
