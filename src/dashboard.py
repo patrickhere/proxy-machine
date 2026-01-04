@@ -132,7 +132,9 @@ class BackgroundTask:
             "message": self.message,
             "error": self.error,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            ),
             "created_at": self.created_at.isoformat(),
         }
 
@@ -257,6 +259,8 @@ def _task_sync_database(task: BackgroundTask):
 
 def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
     """Background task: Refresh database index."""
+    import subprocess
+
     task.message = "Starting index refresh..."
     task.progress = 10
 
@@ -2886,7 +2890,7 @@ def api_task_stream(task_id):
         while True:
             task = get_task(task_id)
             if not task:
-                yield f"data: {{'error': 'Task not found'}}\n\n"
+                yield "data: {'error': 'Task not found'}\n\n"
                 break
 
             # Only send if something changed
@@ -2921,7 +2925,10 @@ def api_task_sync_database():
     with TASK_REGISTRY_LOCK:
         for t in TASK_REGISTRY.values():
             if t.task_type == "sync_database" and t.status == "running":
-                return jsonify({"error": "Sync already in progress", "task_id": t.id}), 409
+                return (
+                    jsonify({"error": "Sync already in progress", "task_id": t.id}),
+                    409,
+                )
 
     task = create_task("Database Sync", "sync_database")
     run_task_in_background(task, _task_sync_database)
@@ -2931,13 +2938,18 @@ def api_task_sync_database():
 @app.route("/api/tasks/refresh-index", methods=["POST"])
 def api_task_refresh_index():
     """Start an index refresh task."""
-    allow_download = request.json.get("allow_download", False) if request.is_json else False
+    allow_download = (
+        request.json.get("allow_download", False) if request.is_json else False
+    )
 
     # Check if already running
     with TASK_REGISTRY_LOCK:
         for t in TASK_REGISTRY.values():
             if t.task_type == "refresh_index" and t.status == "running":
-                return jsonify({"error": "Refresh already in progress", "task_id": t.id}), 409
+                return (
+                    jsonify({"error": "Refresh already in progress", "task_id": t.id}),
+                    409,
+                )
 
     task = create_task("Index Refresh", "refresh_index")
     run_task_in_background(task, _task_refresh_index, allow_download)
