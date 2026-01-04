@@ -22,9 +22,9 @@ if [ "$TAILSCALE_ENABLED" = "true" ]; then
     if [ -n "$TAILSCALE_AUTHKEY" ]; then
         log "Authenticating with Tailscale..."
         if [ -n "$TAILSCALE_HOSTNAME" ]; then
-            tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$TAILSCALE_HOSTNAME" --accept-routes
+            tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="$TAILSCALE_HOSTNAME" --accept-routes --ssh
         else
-            tailscale up --authkey="$TAILSCALE_AUTHKEY" --accept-routes
+            tailscale up --authkey="$TAILSCALE_AUTHKEY" --accept-routes --ssh
         fi
         log "Tailscale connected successfully!"
         tailscale status
