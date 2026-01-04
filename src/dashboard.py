@@ -192,46 +192,82 @@ def run_task_in_background(task: BackgroundTask, func, *args, **kwargs):
 def _task_sync_database(task: BackgroundTask):
     """Background task: Sync database from Scryfall."""
     import subprocess
+    import sys
 
     task.message = "Starting database sync..."
     task.progress = 5
 
-    # Run bulk sync command
-    task.message = "Downloading bulk data from Scryfall..."
-    task.progress = 10
-
     try:
-        # Get project root
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
 
-        # Run the make bulk-sync command with progress simulation
+        # Step 1: Fetch bulk data (30% of progress)
+        task.message = "Downloading bulk data from Scryfall..."
+        task.progress = 10
+
+        # Use Python directly instead of make (for Docker compatibility)
+        python_exe = sys.executable
+        fetch_script = os.path.join(project_root, "tools", "fetch_bulk.py")
+
+        if os.path.exists(fetch_script):
+            process = subprocess.Popen(
+                [python_exe, fetch_script],
+                cwd=project_root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env={**os.environ, "PYTHONPATH": project_root},
+            )
+
+            for line in iter(process.stdout.readline, ""):
+                if line.strip():
+                    task.message = line.strip()[:100]
+                task.progress = min(task.progress + 1, 40)
+
+            process.wait()
+            if process.returncode != 0:
+                raise Exception(f"Bulk fetch failed with exit code {process.returncode}")
+
+        task.progress = 45
+
+        # Step 2: Rebuild index (50% of progress)
+        task.message = "Rebuilding database index..."
+        rebuild_script = os.path.join(project_root, "db", "bulk_index.py")
+
         process = subprocess.Popen(
-            ["make", "bulk-sync"],
+            [python_exe, rebuild_script, "rebuild"],
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env={**os.environ, "PYTHONPATH": project_root},
         )
 
-        # Read output and update progress
-        lines_seen = 0
         for line in iter(process.stdout.readline, ""):
-            lines_seen += 1
-            # Update message with last line
             if line.strip():
                 task.message = line.strip()[:100]
-
-            # Simulate progress based on output lines
-            # Bulk sync typically outputs 100-500 lines
-            progress = min(10 + (lines_seen // 5), 95)
-            task.progress = progress
+            task.progress = min(task.progress + 1, 90)
 
         process.wait()
-
         if process.returncode != 0:
-            raise Exception(f"Sync failed with exit code {process.returncode}")
+            raise Exception(f"Index rebuild failed with exit code {process.returncode}")
+
+        # Step 3: Vacuum (5% of progress)
+        task.message = "Optimizing database..."
+        task.progress = 92
+
+        process = subprocess.Popen(
+            [python_exe, rebuild_script, "vacuum"],
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env={**os.environ, "PYTHONPATH": project_root},
+        )
+        process.wait()
 
         task.progress = 100
         task.message = "Database sync completed successfully"
@@ -244,6 +280,7 @@ def _task_sync_database(task: BackgroundTask):
 def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
     """Background task: Refresh database index."""
     import subprocess
+    import sys
 
     task.message = "Starting index refresh..."
     task.progress = 10
@@ -252,7 +289,10 @@ def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
 
-        cmd = ["make", "bulk-index-rebuild"]
+        # Use Python directly instead of make (for Docker compatibility)
+        python_exe = sys.executable
+        rebuild_script = os.path.join(project_root, "db", "bulk_index.py")
+
         if allow_download:
             task.message = "Downloading and rebuilding index..."
         else:
@@ -261,20 +301,19 @@ def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
         task.progress = 20
 
         process = subprocess.Popen(
-            cmd,
+            [python_exe, rebuild_script, "rebuild"],
             cwd=project_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env={**os.environ, "PYTHONPATH": project_root},
         )
 
-        lines_seen = 0
         for line in iter(process.stdout.readline, ""):
-            lines_seen += 1
             if line.strip():
                 task.message = line.strip()[:100]
-            task.progress = min(20 + (lines_seen // 3), 95)
+            task.progress = min(task.progress + 1, 95)
 
         process.wait()
 
@@ -1470,23 +1509,37 @@ def run_action():
 def api_profiles():
     """List all available profiles."""
     try:
-        profiles_path = os.path.join(
+        # Get profiles from PROFILES_ROOT directory (Docker) or fallback to profiles.json
+        profiles_root = os.environ.get("PROFILES_ROOT")
+
+        profile_list = []
+
+        # First, try scanning PROFILES_ROOT directory
+        if profiles_root and os.path.isdir(profiles_root):
+            for entry in os.scandir(profiles_root):
+                if entry.is_dir() and not entry.name.startswith("."):
+                    profile_list.append({"name": entry.name})
+
+        # Fallback: also check profiles.json for additional profiles
+        profiles_json_path = os.path.join(
             create_pdf.project_root_directory,
             "proxy-machine",
             "assets",
             "profiles.json",
         )
-        if not os.path.exists(profiles_path):
-            return jsonify({"profiles": []})
+        if os.path.exists(profiles_json_path):
+            import json
 
-        import json
+            with open(profiles_json_path, "r") as f:
+                profiles_data = json.load(f)
+            # Add profiles from JSON that aren't already in the list
+            existing_names = {p["name"] for p in profile_list}
+            for name in profiles_data.keys():
+                if name not in existing_names:
+                    profile_list.append({"name": name})
 
-        with open(profiles_path, "r") as f:
-            profiles_data = json.load(f)
-
-        profile_list = []
-        for name in profiles_data.keys():
-            profile_list.append({"name": name})
+        # Sort alphabetically
+        profile_list.sort(key=lambda p: p["name"])
 
         return jsonify({"profiles": profile_list})
     except Exception as e:
