@@ -201,39 +201,46 @@ def _task_sync_database(task: BackgroundTask):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
 
-        # Step 1: Fetch bulk data (30% of progress)
-        task.message = "Downloading bulk data from Scryfall..."
-        task.progress = 10
-
         # Use Python directly instead of make (for Docker compatibility)
         python_exe = sys.executable
         fetch_script = os.path.join(project_root, "tools", "fetch_bulk.py")
+        src_dir = os.path.join(project_root, "src")
+
+        # Step 1: Fetch all bulk files (40% of progress)
+        bulk_files = [
+            ("all-cards", "Downloading all-cards bulk data..."),
+            ("oracle-cards", "Downloading oracle-cards bulk data..."),
+            ("unique-artwork", "Downloading unique-artwork bulk data..."),
+        ]
 
         if os.path.exists(fetch_script):
-            process = subprocess.Popen(
-                [python_exe, fetch_script],
-                cwd=project_root,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env={**os.environ, "PYTHONPATH": project_root},
-            )
+            for i, (bulk_id, msg) in enumerate(bulk_files):
+                task.message = msg
+                task.progress = 10 + (i * 10)
 
-            for line in iter(process.stdout.readline, ""):
-                if line.strip():
-                    task.message = line.strip()[:100]
-                task.progress = min(task.progress + 1, 40)
+                process = subprocess.Popen(
+                    [python_exe, fetch_script, "--id", bulk_id],
+                    cwd=project_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    env={**os.environ, "PYTHONPATH": src_dir},
+                )
 
-            process.wait()
-            if process.returncode != 0:
-                raise Exception(f"Bulk fetch failed with exit code {process.returncode}")
+                for line in iter(process.stdout.readline, ""):
+                    if line.strip():
+                        task.message = line.strip()[:100]
+
+                process.wait()
+                if process.returncode != 0:
+                    raise Exception(f"Bulk fetch '{bulk_id}' failed with exit code {process.returncode}")
 
         task.progress = 45
 
         # Step 2: Rebuild index (50% of progress)
         task.message = "Rebuilding database index..."
-        rebuild_script = os.path.join(project_root, "db", "bulk_index.py")
+        rebuild_script = os.path.join(project_root, "src", "db", "bulk_index.py")
 
         process = subprocess.Popen(
             [python_exe, rebuild_script, "rebuild"],
@@ -242,7 +249,7 @@ def _task_sync_database(task: BackgroundTask):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env={**os.environ, "PYTHONPATH": project_root},
+            env={**os.environ, "PYTHONPATH": src_dir},
         )
 
         for line in iter(process.stdout.readline, ""):
@@ -265,7 +272,7 @@ def _task_sync_database(task: BackgroundTask):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env={**os.environ, "PYTHONPATH": project_root},
+            env={**os.environ, "PYTHONPATH": src_dir},
         )
         process.wait()
 
@@ -288,10 +295,11 @@ def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
+        src_dir = os.path.join(project_root, "src")
 
         # Use Python directly instead of make (for Docker compatibility)
         python_exe = sys.executable
-        rebuild_script = os.path.join(project_root, "db", "bulk_index.py")
+        rebuild_script = os.path.join(project_root, "src", "db", "bulk_index.py")
 
         if allow_download:
             task.message = "Downloading and rebuilding index..."
@@ -307,7 +315,7 @@ def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env={**os.environ, "PYTHONPATH": project_root},
+            env={**os.environ, "PYTHONPATH": src_dir},
         )
 
         for line in iter(process.stdout.readline, ""):

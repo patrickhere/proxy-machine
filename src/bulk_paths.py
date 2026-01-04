@@ -37,7 +37,8 @@ def legacy_bulk_locations() -> Iterable[Path]:
 
 def get_bulk_data_directory(*, prefer_primary: bool = False) -> Path:
     """Resolve the directory that should hold bulk assets."""
-    env_dir = os.environ.get("PM_BULK_DATA_DIR")
+    # Check both PM_BULK_DATA_DIR and BULK_DATA_DIR (Docker compatibility)
+    env_dir = os.environ.get("PM_BULK_DATA_DIR") or os.environ.get("BULK_DATA_DIR")
     if env_dir:
         return _expand_path(env_dir)
 
