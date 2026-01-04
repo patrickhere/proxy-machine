@@ -134,8 +134,16 @@
             </div>
         </div>
 
+        <!-- Search Error -->
+        <div x-show="searchError" x-cloak class="mt-8 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+            <p class="text-red-400 font-display" x-text="searchError"></p>
+            <p x-show="searchError && searchError.includes('Database not found')" class="text-sm text-arcanum-muted mt-2">
+                Go to <a href="/admin" class="text-mana-gold hover:underline">Admin Panel</a> and click "Sync Database" to download card data.
+            </p>
+        </div>
+
         <!-- Search Results -->
-        <div x-show="searchResults.length > 0 || isSearching" class="mt-8">
+        <div x-show="(searchResults.length > 0 || isSearching) && !searchError" class="mt-8">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="font-display text-lg text-arcanum-text">
                     <span x-show="!isSearching" x-text="searchResults.length + ' cards found'"></span>
@@ -432,6 +440,7 @@ function dashboard() {
         showFilters: false,
         searchResults: [],
         isSearching: false,
+        searchError: null,
 
         // Methods
         showMessage(text, type) {
@@ -462,10 +471,12 @@ function dashboard() {
         async performSearch() {
             if (!this.searchQuery && this.colors.length === 0 && !this.cardType && !this.rarity && !this.cmc && !this.setCode) {
                 this.searchResults = [];
+                this.searchError = null;
                 return;
             }
 
             this.isSearching = true;
+            this.searchError = null;
 
             const params = new URLSearchParams();
             if (this.searchQuery) params.set('q', this.searchQuery);
@@ -479,9 +490,14 @@ function dashboard() {
                 const res = await fetch(`/api/search/cards?${params}`);
                 const data = await res.json();
                 this.searchResults = data.cards || [];
+                this.searchError = data.error || null;
+                if (data.error) {
+                    this.showMessage(data.error, 'error');
+                }
             } catch (e) {
                 this.showMessage('Search failed', 'error');
                 this.searchResults = [];
+                this.searchError = 'Search failed';
             } finally {
                 this.isSearching = false;
             }

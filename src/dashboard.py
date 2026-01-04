@@ -40,6 +40,9 @@ except ImportError:
 import create_pdf
 import scryfall_enrich
 
+# User authentication database
+from db import users as user_db
+
 try:
     # Optional DB helper for UA counts
     from db.bulk_index import count_unique_artworks as db_count_unique_artworks  # type: ignore
@@ -394,6 +397,37 @@ def admin_required(f):
         if not session.get("admin_authenticated"):
             return redirect(url_for("admin_login", next=request.url))
         return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def login_required(f):
+    """Decorator to require user authentication."""
+    from functools import wraps
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("user_login", next=request.url))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def profile_owner_required(f):
+    """Decorator to require that user owns the profile or is admin."""
+    from functools import wraps
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        profile = kwargs.get("profile") or request.view_args.get("profile")
+        # Admin can access any profile
+        if session.get("is_admin"):
+            return f(*args, **kwargs)
+        # User can only access their own profile (username = profile name)
+        if session.get("username") == profile:
+            return f(*args, **kwargs)
+        return jsonify({"error": "Access denied - you can only access your own profile"}), 403
 
     return decorated_function
 
@@ -1515,8 +1549,24 @@ def run_action():
 @app.route("/api/profiles", methods=["GET"])
 @csrf_exempt
 def api_profiles():
-    """List all available profiles."""
+    """List available profiles.
+
+    If user is logged in:
+      - Admin sees all profiles
+      - Regular user sees only their own profile
+    If not logged in:
+      - Return empty list (user needs to log in)
+    """
     try:
+        # Check if user is logged in
+        user_id = session.get("user_id")
+        is_admin = session.get("is_admin")
+        username = session.get("username")
+
+        if not user_id:
+            # Not logged in - return empty list
+            return jsonify({"profiles": [], "logged_in": False})
+
         # Get profiles from PROFILES_ROOT directory (Docker) or fallback to profiles.json
         profiles_root = os.environ.get("PROFILES_ROOT")
 
@@ -1526,7 +1576,9 @@ def api_profiles():
         if profiles_root and os.path.isdir(profiles_root):
             for entry in os.scandir(profiles_root):
                 if entry.is_dir() and not entry.name.startswith("."):
-                    profile_list.append({"name": entry.name})
+                    # Admin sees all, regular user sees only their profile
+                    if is_admin or entry.name == username:
+                        profile_list.append({"name": entry.name})
 
         # Fallback: also check profiles.json for additional profiles
         profiles_json_path = os.path.join(
@@ -1544,12 +1596,14 @@ def api_profiles():
             existing_names = {p["name"] for p in profile_list}
             for name in profiles_data.keys():
                 if name not in existing_names:
-                    profile_list.append({"name": name})
+                    # Admin sees all, regular user sees only their profile
+                    if is_admin or name == username:
+                        profile_list.append({"name": name})
 
         # Sort alphabetically
         profile_list.sort(key=lambda p: p["name"])
 
-        return jsonify({"profiles": profile_list})
+        return jsonify({"profiles": profile_list, "logged_in": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1584,8 +1638,10 @@ def api_profile_decks(profile):
 
 @app.route("/api/profiles/<profile>/decks", methods=["POST"])
 @csrf_exempt
+@login_required
+@profile_owner_required
 def api_create_deck(profile):
-    """Create a new deck subfolder for a profile."""
+    """Create a new deck subfolder for a profile. Requires auth."""
     try:
         data = request.get_json()
         deck_name = data.get("deck_name")
@@ -1733,8 +1789,10 @@ def _pdf_generation_task(
 
 @app.route("/api/profiles/<profile>/pdf", methods=["POST"])
 @csrf_exempt
+@login_required
+@profile_owner_required
 def api_generate_pdf(profile):
-    """Generate a PDF for a profile (with optional deck selection and advanced options)."""
+    """Generate a PDF for a profile. Requires auth."""
     try:
         data = request.get_json()
         deck = data.get("deck")  # Optional deck name
@@ -1815,8 +1873,10 @@ def _sanitize_filename(filename: str) -> str:
 
 @app.route("/api/profiles/<profile>/upload", methods=["POST"])
 @csrf_exempt
+@login_required
+@profile_owner_required
 def api_upload_images(profile):
-    """Upload card images to a profile's folders."""
+    """Upload card images to a profile's folders. Requires auth."""
     try:
         profile_paths = create_pdf.build_profile_directories(profile, {})
         base_dir = profile_paths.get("base_directory")
@@ -1899,8 +1959,10 @@ def api_upload_images(profile):
 
 @app.route("/api/profiles/<profile>/import-deck", methods=["POST"])
 @csrf_exempt
+@login_required
+@profile_owner_required
 def api_import_deck(profile):
-    """Import and analyze a deck list, fetching card images."""
+    """Import and analyze a deck list, fetching card images. Requires auth."""
     try:
         data = request.get_json()
         deck_list = data.get("deck_list", "").strip()
@@ -2769,6 +2831,26 @@ def api_db_info():
     return jsonify(_bulk_db_info())
 
 
+@app.route("/api/user", methods=["GET"])
+@csrf_exempt
+def api_user_info():
+    """Get current user session info."""
+    if session.get("user_id"):
+        return jsonify({
+            "logged_in": True,
+            "user_id": session.get("user_id"),
+            "username": session.get("username"),
+            "is_admin": session.get("is_admin", False),
+        })
+    else:
+        return jsonify({
+            "logged_in": False,
+            "user_id": None,
+            "username": None,
+            "is_admin": False,
+        })
+
+
 @app.route("/admin/db_maintenance", methods=["GET"])  # GET to avoid CSRF for now
 def admin_db_maintenance():
     # Avoid accidental downloads by default; require allow_download=1 to permit network
@@ -2876,6 +2958,15 @@ def api_search_cards():
 
     try:
         from db import bulk_index
+
+        # Check if database exists
+        if not os.path.exists(bulk_index.DB_PATH):
+            return jsonify({
+                "cards": [],
+                "count": 0,
+                "error": "Database not found. Please sync the database from the Admin panel first.",
+                "db_missing": True
+            })
 
         results = bulk_index.query_cards(
             limit=limit,
@@ -3082,6 +3173,421 @@ def notifications():
             }
         ),
     )
+
+
+# ============================================================
+# USER AUTHENTICATION SECTION
+# ============================================================
+
+USER_LOGIN_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - The Proxy Machine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e8e6e3;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+        }
+        .login-box {
+            background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            position: relative;
+        }
+        .login-box::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px; bottom: -1px;
+            background: linear-gradient(135deg, rgba(212,175,55,0.2) 0%, transparent 50%, rgba(212,175,55,0.1) 100%);
+            border-radius: 12px;
+            z-index: -1;
+        }
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            color: #D4AF37;
+            margin: 0 0 8px 0;
+            font-size: 1.75rem;
+            text-align: center;
+            letter-spacing: 0.05em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #8a8a9a;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+        }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #a8a8b8;
+            font-size: 0.9rem;
+        }
+        input[type="text"], input[type="password"], input[type="email"] {
+            width: 100%;
+            padding: 14px 16px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            color: #e8e6e3;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: rgba(212,175,55,0.5);
+            box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+        }
+        input::placeholder { color: #5a5a6a; }
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+            color: #0a0a0f;
+            border: none;
+            padding: 14px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.05em;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 8px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(212,175,55,0.3);
+        }
+        .error {
+            background: rgba(220,53,69,0.15);
+            border: 1px solid rgba(220,53,69,0.3);
+            color: #ff6b6b;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .success {
+            background: rgba(40,167,69,0.15);
+            border: 1px solid rgba(40,167,69,0.3);
+            color: #5fdd6b;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .links {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .links a {
+            color: #8a8a9a;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .links a:hover { color: #D4AF37; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>Welcome Back</h1>
+            <p class="subtitle">The Proxy Machine</p>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            {% if success %}<p class="success">{{ success }}</p>{% endif %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="username">Username or Email</label>
+                    <input type="text" id="username" name="username" placeholder="Enter username or email" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter password" required>
+                </div>
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <button type="submit">Sign In</button>
+            </form>
+            <div class="links">
+                <a href="{{ url_for('user_register') }}">Create Account</a>
+                <a href="/">Return to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+USER_REGISTER_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - The Proxy Machine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e8e6e3;
+        }
+        .register-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+        }
+        .register-box {
+            background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            position: relative;
+        }
+        .register-box::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px; bottom: -1px;
+            background: linear-gradient(135deg, rgba(212,175,55,0.2) 0%, transparent 50%, rgba(212,175,55,0.1) 100%);
+            border-radius: 12px;
+            z-index: -1;
+        }
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            color: #D4AF37;
+            margin: 0 0 8px 0;
+            font-size: 1.75rem;
+            text-align: center;
+            letter-spacing: 0.05em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #8a8a9a;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+        }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #a8a8b8;
+            font-size: 0.9rem;
+        }
+        .form-hint {
+            font-size: 0.8rem;
+            color: #6a6a7a;
+            margin-top: 4px;
+        }
+        input[type="text"], input[type="password"], input[type="email"] {
+            width: 100%;
+            padding: 14px 16px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            color: #e8e6e3;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: rgba(212,175,55,0.5);
+            box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+        }
+        input::placeholder { color: #5a5a6a; }
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+            color: #0a0a0f;
+            border: none;
+            padding: 14px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.05em;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 8px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(212,175,55,0.3);
+        }
+        .error {
+            background: rgba(220,53,69,0.15);
+            border: 1px solid rgba(220,53,69,0.3);
+            color: #ff6b6b;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .info-box {
+            background: rgba(59,130,246,0.15);
+            border: 1px solid rgba(59,130,246,0.3);
+            color: #93c5fd;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .links {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .links a {
+            color: #8a8a9a;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .links a:hover { color: #D4AF37; }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="register-box">
+            <h1>Create Account</h1>
+            <p class="subtitle">Join The Proxy Machine</p>
+            <div class="info-box">Your account requires admin approval before you can log in.</div>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Choose a username" required value="{{ username or '' }}">
+                    <p class="form-hint">3-20 characters. Letters, numbers, hyphens, underscores only.</p>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="Your email address" required value="{{ email or '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Choose a password" required>
+                    <p class="form-hint">Minimum 8 characters</p>
+                </div>
+                <div class="form-group">
+                    <label for="password_confirm">Confirm Password</label>
+                    <input type="password" id="password_confirm" name="password_confirm" placeholder="Confirm your password" required>
+                </div>
+                <button type="submit">Create Account</button>
+            </form>
+            <div class="links">
+                <a href="{{ url_for('user_login') }}">Already have an account?</a>
+                <a href="/">Return to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+USER_PENDING_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Pending - The Proxy Machine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e8e6e3;
+        }
+        .pending-container {
+            width: 100%;
+            max-width: 480px;
+            padding: 20px;
+        }
+        .pending-box {
+            background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            text-align: center;
+        }
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            color: #D4AF37;
+            margin: 0 0 16px 0;
+            font-size: 1.5rem;
+            letter-spacing: 0.05em;
+        }
+        p { color: #a8a8b8; line-height: 1.6; margin-bottom: 24px; }
+        .back-link {
+            display: inline-block;
+            color: #D4AF37;
+            text-decoration: none;
+            padding: 12px 24px;
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .back-link:hover {
+            background: rgba(212,175,55,0.1);
+            border-color: rgba(212,175,55,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="pending-container">
+        <div class="pending-box">
+            <div class="icon">&#9203;</div>
+            <h1>Registration Submitted</h1>
+            <p>Your account <strong>{{ username }}</strong> has been created and is awaiting admin approval. You will be able to log in once an administrator approves your account.</p>
+            <a href="/" class="back-link">Return to Dashboard</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
 
 
 # ============================================================
@@ -3547,6 +4053,18 @@ ADMIN_DASHBOARD_TEMPLATE = """
         </div>
 
         <div class="section">
+            <h2>User Management</h2>
+            {% if pending_users > 0 %}
+            <p style="color: #ffc107; margin-bottom: 12px;">
+                <span style="background: rgba(255,193,7,0.2); padding: 4px 10px; border-radius: 12px;">
+                    {{ pending_users }} pending approval{{ 's' if pending_users != 1 else '' }}
+                </span>
+            </p>
+            {% endif %}
+            <a href="{{ url_for('admin_users') }}" class="btn">Manage Users</a>
+        </div>
+
+        <div class="section">
             <h2>System Info</h2>
             <table>
                 <tr><th>Setting</th><th>Value</th></tr>
@@ -3692,6 +4210,336 @@ ADMIN_DASHBOARD_TEMPLATE = """
 </html>
 """
 
+ADMIN_USERS_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - The Proxy Machine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: #e8e6e3;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 {
+            font-family: 'Cinzel', serif;
+            color: #D4AF37;
+            font-size: 1.75rem;
+            margin-bottom: 8px;
+        }
+        .subtitle { color: #8a8a9a; margin-bottom: 24px; }
+        .card {
+            background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .card-header {
+            font-family: 'Cinzel', serif;
+            color: #D4AF37;
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(212,175,55,0.2);
+        }
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .message-success {
+            background: rgba(40,167,69,0.15);
+            border: 1px solid rgba(40,167,69,0.3);
+            color: #5fdd6b;
+        }
+        .message-error {
+            background: rgba(220,53,69,0.15);
+            border: 1px solid rgba(220,53,69,0.3);
+            color: #ff6b6b;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        th {
+            color: #a8a8b8;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td { color: #e8e6e3; }
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-admin {
+            background: rgba(212,175,55,0.2);
+            color: #D4AF37;
+        }
+        .badge-user {
+            background: rgba(100,149,237,0.2);
+            color: #93c5fd;
+        }
+        .badge-pending {
+            background: rgba(255,193,7,0.2);
+            color: #ffc107;
+        }
+        .actions { display: flex; gap: 8px; }
+        .btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-approve {
+            background: rgba(40,167,69,0.2);
+            color: #5fdd6b;
+            border: 1px solid rgba(40,167,69,0.3);
+        }
+        .btn-approve:hover { background: rgba(40,167,69,0.3); }
+        .btn-delete {
+            background: rgba(220,53,69,0.2);
+            color: #ff6b6b;
+            border: 1px solid rgba(220,53,69,0.3);
+        }
+        .btn-delete:hover { background: rgba(220,53,69,0.3); }
+        .btn-toggle {
+            background: rgba(100,149,237,0.2);
+            color: #93c5fd;
+            border: 1px solid rgba(100,149,237,0.3);
+        }
+        .btn-toggle:hover { background: rgba(100,149,237,0.3); }
+        .back-link {
+            display: inline-block;
+            color: #D4AF37;
+            text-decoration: none;
+            margin-top: 16px;
+        }
+        .back-link:hover { text-decoration: underline; }
+        .empty-state {
+            color: #6a6a7a;
+            text-align: center;
+            padding: 24px;
+        }
+        .pending-count {
+            background: rgba(255,193,7,0.2);
+            color: #ffc107;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>User Management</h1>
+        <p class="subtitle">Manage user accounts and approvals</p>
+
+        {% if message %}
+        <div class="message message-{{ message_type }}">{{ message }}</div>
+        {% endif %}
+
+        {% if pending_users %}
+        <div class="card">
+            <div class="card-header">Pending Approvals <span class="pending-count">{{ pending_users|length }}</span></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Registered</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in pending_users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.created_at }}</td>
+                        <td class="actions">
+                            <form action="{{ url_for('admin_approve_user', username=user.username) }}" method="post" style="display:inline;">
+                                <button type="submit" class="btn btn-approve">Approve</button>
+                            </form>
+                            <form action="{{ url_for('admin_delete_user', username=user.username) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete this pending user?');">
+                                <button type="submit" class="btn btn-delete">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">All Users</div>
+            {% if users %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email }}</td>
+                        <td><span class="badge badge-{{ user.role }}">{{ user.role }}</span></td>
+                        <td>
+                            {% if user.is_approved %}
+                            <span class="badge badge-user">Active</span>
+                            {% else %}
+                            <span class="badge badge-pending">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.last_login or 'Never' }}</td>
+                        <td class="actions">
+                            <form action="{{ url_for('admin_toggle_user_role', username=user.username) }}" method="post" style="display:inline;">
+                                <button type="submit" class="btn btn-toggle">
+                                    {% if user.role == 'admin' %}Demote{% else %}Promote{% endif %}
+                                </button>
+                            </form>
+                            <form action="{{ url_for('admin_delete_user', username=user.username) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete user {{ user.username }}? This cannot be undone.');">
+                                <button type="submit" class="btn btn-delete">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">No users registered yet.</div>
+            {% endif %}
+        </div>
+
+        <a href="{{ url_for('admin_dashboard') }}" class="back-link">Back to Admin Dashboard</a>
+    </div>
+</body>
+</html>
+"""
+
+
+# ============================================================
+# USER AUTHENTICATION ROUTES
+# ============================================================
+
+
+@app.route("/login", methods=["GET", "POST"])
+def user_login():
+    """User login page."""
+    error = None
+    success = request.args.get("registered")
+    next_url = request.args.get("next", url_for("index"))
+    client_ip = request.remote_addr or "unknown"
+
+    # Check rate limit
+    is_allowed, seconds_remaining = _check_login_rate_limit(client_ip)
+    if not is_allowed:
+        error = f"Too many login attempts. Please try again in {seconds_remaining} seconds."
+        return (
+            render_template_string(
+                USER_LOGIN_TEMPLATE, error=error, success=None, next_url=next_url
+            ),
+            429,
+        )
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        next_url = request.form.get("next", url_for("index"))
+
+        verified, user, message = user_db.verify_user(username, password)
+
+        if verified and user:
+            # Successful login
+            session["user_id"] = user["id"]
+            session["username"] = user["username"]
+            session["is_admin"] = user["is_admin"]
+            session.permanent = True
+            _clear_login_attempts(client_ip)
+
+            # If user is admin, also set admin_authenticated for admin panel access
+            if user["is_admin"]:
+                session["admin_authenticated"] = True
+
+            return redirect(next_url)
+        else:
+            _record_login_attempt(client_ip)
+            attempts_left = MAX_LOGIN_ATTEMPTS - len(LOGIN_ATTEMPTS.get(client_ip, []))
+            if attempts_left > 0:
+                error = f"{message}. {attempts_left} attempts remaining."
+            else:
+                error = f"Too many failed attempts. Locked out for {LOGIN_LOCKOUT_SECONDS // 60} minutes."
+
+    success_msg = "Account created. Please log in." if success else None
+    return render_template_string(
+        USER_LOGIN_TEMPLATE, error=error, success=success_msg, next_url=next_url
+    )
+
+
+@app.route("/register", methods=["GET", "POST"])
+def user_register():
+    """User registration page."""
+    error = None
+    username = ""
+    email = ""
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        password_confirm = request.form.get("password_confirm", "")
+
+        # Validate password match
+        if password != password_confirm:
+            error = "Passwords do not match"
+        else:
+            # Create user (pending approval)
+            success, message = user_db.create_user(username, email, password)
+
+            if success:
+                # Show pending approval page
+                return render_template_string(USER_PENDING_TEMPLATE, username=username)
+            else:
+                error = message
+
+    return render_template_string(
+        USER_REGISTER_TEMPLATE, error=error, username=username, email=email
+    )
+
+
+@app.route("/logout")
+def user_logout():
+    """Log out user and clear all session data."""
+    session.clear()
+    return redirect(url_for("index"))
+
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
@@ -3785,6 +4633,123 @@ def admin_dashboard():
         shared_root=os.environ.get("SHARED_ROOT", "N/A"),
         profiles_root=os.environ.get("PROFILES_ROOT", "N/A"),
         bulk_data_dir=os.environ.get("BULK_DATA_DIR", "N/A"),
+        pending_users=user_db.pending_count(),
+    )
+
+
+# ============================================================
+# ADMIN USER MANAGEMENT ROUTES
+# ============================================================
+
+
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    """List all users for admin management."""
+    all_users = user_db.list_users()
+    pending_users = user_db.list_pending_users()
+    message = request.args.get("message")
+    message_type = request.args.get("message_type", "success")
+
+    return render_template_string(
+        ADMIN_USERS_TEMPLATE,
+        users=all_users,
+        pending_users=pending_users,
+        message=message,
+        message_type=message_type,
+    )
+
+
+@app.route("/admin/users/<username>/approve", methods=["POST"])
+@admin_required
+@csrf_exempt
+def admin_approve_user(username):
+    """Approve a pending user and create their profile directory."""
+    success, message = user_db.approve_user(username)
+
+    if success:
+        # Create profile directory for the new user
+        profiles_root = os.environ.get(
+            "PROFILES_ROOT",
+            os.path.join(
+                create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"
+            ),
+        )
+        profile_path = os.path.join(profiles_root, username.lower())
+        try:
+            os.makedirs(os.path.join(profile_path, "decklist"), exist_ok=True)
+            os.makedirs(os.path.join(profile_path, "output"), exist_ok=True)
+            os.makedirs(
+                os.path.join(profile_path, "pictures-of-cards", "to-print", "front"),
+                exist_ok=True,
+            )
+            message = f"User '{username}' approved and profile created"
+        except Exception as e:
+            message = f"User approved but failed to create profile: {e}"
+
+    return redirect(
+        url_for(
+            "admin_users",
+            message=message,
+            message_type="success" if success else "error",
+        )
+    )
+
+
+@app.route("/admin/users/<username>/delete", methods=["POST"])
+@admin_required
+@csrf_exempt
+def admin_delete_user(username):
+    """Delete a user account."""
+    # Prevent deleting yourself
+    if session.get("username") == username:
+        return redirect(
+            url_for(
+                "admin_users",
+                message="Cannot delete your own account",
+                message_type="error",
+            )
+        )
+
+    success, message = user_db.delete_user(username)
+    return redirect(
+        url_for(
+            "admin_users",
+            message=message,
+            message_type="success" if success else "error",
+        )
+    )
+
+
+@app.route("/admin/users/<username>/toggle-admin", methods=["POST"])
+@admin_required
+@csrf_exempt
+def admin_toggle_user_role(username):
+    """Toggle user between admin and regular user role."""
+    # Prevent demoting yourself
+    if session.get("username") == username:
+        return redirect(
+            url_for(
+                "admin_users",
+                message="Cannot change your own role",
+                message_type="error",
+            )
+        )
+
+    user = user_db.get_user(username)
+    if not user:
+        return redirect(
+            url_for("admin_users", message="User not found", message_type="error")
+        )
+
+    new_role = "user" if user.get("role") == "admin" else "admin"
+    success, message = user_db.set_user_role(username, new_role)
+    return redirect(
+        url_for(
+            "admin_users",
+            message=message,
+            message_type="success" if success else "error",
+        )
     )
 
 

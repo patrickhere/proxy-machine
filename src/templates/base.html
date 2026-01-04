@@ -335,11 +335,30 @@
                     </div>
 
                     <!-- Desktop Nav -->
-                    <div class="hidden md:flex items-center gap-1">
+                    <div class="hidden md:flex items-center gap-1" x-data="userNav()" x-init="fetchUser()">
                         <a href="/" class="px-4 py-2 text-arcanum-text/80 hover:text-mana-gold font-display text-sm tracking-wide transition-colors">Dashboard</a>
                         <a href="/coverage" class="px-4 py-2 text-arcanum-text/80 hover:text-mana-gold font-display text-sm tracking-wide transition-colors">Coverage</a>
                         <a href="/unique_art" class="px-4 py-2 text-arcanum-text/80 hover:text-mana-gold font-display text-sm tracking-wide transition-colors">Unique Art</a>
-                        <a href="/admin" class="px-4 py-2 text-arcanum-text/80 hover:text-mana-gold font-display text-sm tracking-wide transition-colors">Admin</a>
+                        <a x-show="isAdmin" x-cloak href="/admin" class="px-4 py-2 text-arcanum-text/80 hover:text-mana-gold font-display text-sm tracking-wide transition-colors">Admin</a>
+
+                        <div class="w-px h-6 bg-arcanum-border mx-2"></div>
+
+                        <!-- User Auth Section -->
+                        <template x-if="loggedIn">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-display text-mana-gold" x-text="username"></span>
+                                <template x-if="isAdmin">
+                                    <span class="px-2 py-0.5 text-xs rounded bg-mana-gold/20 text-mana-gold font-display">Admin</span>
+                                </template>
+                                <a href="/logout" class="px-3 py-1.5 text-sm font-display text-arcanum-muted hover:text-red-400 transition-colors">Logout</a>
+                            </div>
+                        </template>
+                        <template x-if="!loggedIn">
+                            <div class="flex items-center gap-2">
+                                <a href="/login" class="px-4 py-2 text-arcanum-text/80 hover:text-mana-gold font-display text-sm tracking-wide transition-colors">Login</a>
+                                <a href="/register" class="px-4 py-2 bg-mana-gold/20 text-mana-gold border border-mana-gold/30 rounded-lg font-display text-sm tracking-wide hover:bg-mana-gold/30 transition-colors">Register</a>
+                            </div>
+                        </template>
 
                         <div class="w-px h-6 bg-arcanum-border mx-2"></div>
 
@@ -374,12 +393,33 @@
             </div>
 
             <!-- Mobile Menu -->
-            <div x-show="mobileMenuOpen" x-cloak x-transition class="md:hidden border-t border-arcanum-border bg-arcanum-deep">
+            <div x-show="mobileMenuOpen" x-cloak x-transition class="md:hidden border-t border-arcanum-border bg-arcanum-deep" x-data="userNav()" x-init="fetchUser()">
                 <div class="px-4 py-4 space-y-2">
                     <a href="/" class="block px-4 py-3 rounded-lg text-arcanum-text hover:bg-arcanum-surface font-display tracking-wide">Dashboard</a>
                     <a href="/coverage" class="block px-4 py-3 rounded-lg text-arcanum-text hover:bg-arcanum-surface font-display tracking-wide">Coverage</a>
                     <a href="/unique_art" class="block px-4 py-3 rounded-lg text-arcanum-text hover:bg-arcanum-surface font-display tracking-wide">Unique Art</a>
-                    <a href="/admin" class="block px-4 py-3 rounded-lg text-arcanum-text hover:bg-arcanum-surface font-display tracking-wide">Admin</a>
+                    <a x-show="isAdmin" x-cloak href="/admin" class="block px-4 py-3 rounded-lg text-arcanum-text hover:bg-arcanum-surface font-display tracking-wide">Admin</a>
+
+                    <div class="border-t border-arcanum-border my-2"></div>
+
+                    <!-- User section for mobile -->
+                    <template x-if="loggedIn">
+                        <div class="space-y-2">
+                            <div class="px-4 py-2 text-mana-gold font-display">
+                                <span x-text="username"></span>
+                                <template x-if="isAdmin">
+                                    <span class="ml-2 px-2 py-0.5 text-xs rounded bg-mana-gold/20">Admin</span>
+                                </template>
+                            </div>
+                            <a href="/logout" class="block px-4 py-3 rounded-lg text-red-400 hover:bg-arcanum-surface font-display tracking-wide">Logout</a>
+                        </div>
+                    </template>
+                    <template x-if="!loggedIn">
+                        <div class="space-y-2">
+                            <a href="/login" class="block px-4 py-3 rounded-lg text-arcanum-text hover:bg-arcanum-surface font-display tracking-wide">Login</a>
+                            <a href="/register" class="block px-4 py-3 rounded-lg text-mana-gold bg-mana-gold/20 hover:bg-mana-gold/30 font-display tracking-wide text-center">Register</a>
+                        </div>
+                    </template>
                 </div>
             </div>
         </nav>
@@ -424,6 +464,27 @@
         // Initialize dark mode
         if (localStorage.getItem('darkMode') !== 'false') {
             document.documentElement.classList.add('dark');
+        }
+
+        // User navigation component
+        function userNav() {
+            return {
+                loggedIn: false,
+                username: '',
+                isAdmin: false,
+                async fetchUser() {
+                    try {
+                        const response = await fetch('/api/user');
+                        const data = await response.json();
+                        this.loggedIn = data.logged_in;
+                        this.username = data.username || '';
+                        this.isAdmin = data.is_admin || false;
+                    } catch (error) {
+                        console.error('Failed to fetch user info:', error);
+                        this.loggedIn = false;
+                    }
+                }
+            };
         }
     </script>
 

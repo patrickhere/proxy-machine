@@ -1515,9 +1515,14 @@ def query_cards(
             clauses.append("is_basic_land=0 AND lower(type_line) NOT LIKE '%land%'")
         if colors_filter:
             # Colors stored as JSON array, check if any requested color is present
+            # Handle colorless (C) specially - colorless cards have empty colors array
             for color in colors_filter:
-                clauses.append("colors LIKE ?")
-                params.append(f'%"{color}"%')
+                if color == "C":
+                    # Colorless: empty array or null
+                    clauses.append("(colors = '[]' OR colors IS NULL OR colors = '')")
+                else:
+                    clauses.append("colors LIKE ?")
+                    params.append(f'%"{color}"%')
 
         sql = (
             "SELECT id,name,name_slug,set_code,collector_number,type_line,is_basic_land,is_token,"
