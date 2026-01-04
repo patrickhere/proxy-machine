@@ -29,9 +29,8 @@ services:
       - PDF_OUTPUT_DIR=/data/pdfs
       - TAILSCALE_ENABLED=true
       - TAILSCALE_HOSTNAME=proxy-machine
-      # Set these in Unraid's Docker Compose plugin env section:
-      # TAILSCALE_AUTHKEY=your-key
-      # ADMIN_PASSWORD=your-password
+      - TAILSCALE_AUTHKEY=YOUR_TAILSCALE_KEY_HERE
+      - ADMIN_PASSWORD=YOUR_PASSWORD_HERE
 
     volumes:
       - ./data/shared:/data/shared
