@@ -4,24 +4,24 @@
 <div x-data="dashboard()" class="space-y-8">
 
     <!-- Hero Section with Search -->
-    <section class="card-frame corner-flourish p-8">
-        <div class="text-center mb-8">
-            <h2 class="font-display text-3xl sm:text-4xl font-semibold text-mana-gold mb-2">Arcane Card Search</h2>
-            <p class="text-arcanum-muted text-lg">Discover cards from across the multiverse</p>
+    <section class="card-frame corner-flourish p-4 sm:p-8">
+        <div class="text-center mb-6 sm:mb-8">
+            <h2 class="font-display text-2xl sm:text-3xl md:text-4xl font-semibold text-mana-gold mb-2">Arcane Card Search</h2>
+            <p class="text-arcanum-muted text-base sm:text-lg">Discover cards from across the multiverse</p>
         </div>
 
         <!-- Search Input -->
-        <div class="max-w-2xl mx-auto mb-8">
+        <div class="max-w-2xl mx-auto mb-6 sm:mb-8">
             <div class="relative">
                 <input type="text"
                        x-model="searchQuery"
                        @input.debounce.300ms="performSearch()"
                        @keydown.enter="performSearch()"
-                       placeholder="Search by card name, oracle text, or type..."
-                       class="w-full px-6 py-4 bg-arcanum-deep border border-arcanum-border rounded-xl text-lg text-arcanum-text placeholder-arcanum-muted focus:border-mana-gold/50 transition-colors">
+                       placeholder="Search cards..."
+                       class="w-full px-4 sm:px-6 py-3 sm:py-4 bg-arcanum-deep border border-arcanum-border rounded-xl text-base sm:text-lg text-arcanum-text placeholder-arcanum-muted focus:border-mana-gold/50 transition-colors pr-12">
                 <button @click="performSearch()"
                         class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-arcanum-muted hover:text-mana-gold transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
                 </button>
@@ -29,7 +29,7 @@
         </div>
 
         <!-- Mana Color Filters -->
-        <div class="flex flex-wrap justify-center gap-3 mb-6">
+        <div class="flex flex-wrap justify-center gap-2 sm:gap-3 mb-6">
             <button @click="toggleColor('W')"
                     :class="colors.includes('W') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-mana-white scale-110' : 'opacity-60 hover:opacity-100'"
                     class="mana-btn bg-gradient-to-br from-mana-white to-amber-200 text-arcanum-void shadow-lg"
@@ -68,8 +68,8 @@
         </div>
 
         <!-- Advanced Filters Panel -->
-        <div x-show="showFilters" x-cloak x-transition class="mt-6 pt-6 border-t border-arcanum-border">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
+        <div x-show="showFilters" x-cloak x-transition class="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-arcanum-border">
+            <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-3xl mx-auto">
                 <!-- Card Type -->
                 <div>
                     <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">CARD TYPE</label>
@@ -183,28 +183,28 @@
     </section>
 
     <!-- Main Dashboard Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
 
         <!-- Profile & Deck Management -->
         <div class="lg:col-span-2 space-y-6">
             <div class="card-frame">
-                <div class="px-6 py-4 border-b border-arcanum-border flex items-center justify-between">
+                <div class="px-4 sm:px-6 py-4 border-b border-arcanum-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
-                        <h2 class="font-display text-xl text-mana-gold">Spellbook Management</h2>
-                        <p class="text-sm text-arcanum-muted">Organize your proxy collections</p>
+                        <h2 class="font-display text-lg sm:text-xl text-mana-gold">Spellbook Management</h2>
+                        <p class="text-xs sm:text-sm text-arcanum-muted">Organize your proxy collections</p>
                     </div>
                     <button @click="showDeckImport = !showDeckImport"
-                            class="px-4 py-2 text-sm font-display tracking-wide text-arcanum-text bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg transition-colors">
+                            class="w-full sm:w-auto px-4 py-2 text-sm font-display tracking-wide text-arcanum-text bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg transition-colors">
                         <span x-text="showDeckImport ? 'Cancel' : 'Import Deck'"></span>
                     </button>
                 </div>
 
-                <div class="p-6 space-y-6">
+                <div class="p-4 sm:p-6 space-y-4 sm:space-y-6">
                     <!-- Profile Selection -->
                     <div>
                         <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">SELECT PROFILE</label>
                         <select id="profileSelect" x-model="selectedProfile" @change="loadDecks()"
-                                class="w-full px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
+                                class="w-full px-3 sm:px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
                             <option value="">Choose a profile...</option>
                         </select>
                     </div>
@@ -233,11 +233,11 @@
                     </div>
 
                     <!-- Create Deck -->
-                    <div class="flex gap-3">
+                    <div class="flex flex-col sm:flex-row gap-3">
                         <input type="text" id="newDeckName" placeholder="New deck name..."
-                               class="flex-1 px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
+                               class="flex-1 px-3 sm:px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
                         <button @click="createDeck()"
-                                class="px-6 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border text-arcanum-text font-display tracking-wide rounded-lg transition-colors">
+                                class="w-full sm:w-auto px-6 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border text-arcanum-text font-display tracking-wide rounded-lg transition-colors">
                             Create Deck
                         </button>
                     </div>
@@ -246,13 +246,13 @@
 
             <!-- PDF Generation -->
             <div class="card-frame">
-                <div class="px-6 py-4 border-b border-arcanum-border">
-                    <h2 class="font-display text-xl text-mana-gold">Forge Proxies</h2>
-                    <p class="text-sm text-arcanum-muted">Generate print-ready PDF sheets</p>
+                <div class="px-4 sm:px-6 py-4 border-b border-arcanum-border">
+                    <h2 class="font-display text-lg sm:text-xl text-mana-gold">Forge Proxies</h2>
+                    <p class="text-xs sm:text-sm text-arcanum-muted">Generate print-ready PDF sheets</p>
                 </div>
 
-                <div class="p-6 space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-4 sm:p-6 space-y-4 sm:space-y-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
                             <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">DECK</label>
                             <select id="deckSelect" x-model="selectedDeck"
@@ -269,13 +269,13 @@
 
                     <!-- Advanced Options -->
                     <details class="group">
-                        <summary class="cursor-pointer text-sm text-arcanum-muted hover:text-mana-gold transition-colors font-display tracking-wide list-none flex items-center gap-2">
+                        <summary class="cursor-pointer text-sm text-arcanum-muted hover:text-mana-gold transition-colors font-display tracking-wide list-none flex items-center gap-2 py-2">
                             <svg class="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                             </svg>
                             Advanced Options
                         </summary>
-                        <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-arcanum-deep/30 rounded-lg">
+                        <div class="mt-3 sm:mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 bg-arcanum-deep/30 rounded-lg">
                             <div>
                                 <label class="block text-xs text-arcanum-muted mb-1">Card Size</label>
                                 <select id="cardSize" class="w-full px-3 py-2 bg-arcanum-void border border-arcanum-border rounded text-sm text-arcanum-text">
@@ -329,10 +329,10 @@
         </div>
 
         <!-- Sidebar -->
-        <div class="space-y-6">
+        <div class="space-y-4 sm:space-y-6">
             <!-- System Status -->
-            <div class="card-frame p-6">
-                <h3 class="font-display text-sm text-arcanum-muted tracking-widest uppercase mb-4">System Status</h3>
+            <div class="card-frame p-4 sm:p-6">
+                <h3 class="font-display text-xs sm:text-sm text-arcanum-muted tracking-widest uppercase mb-3 sm:mb-4">System Status</h3>
                 <div class="space-y-3">
                     <div class="flex items-center justify-between">
                         <span class="text-arcanum-text">Database</span>
@@ -352,8 +352,8 @@
             </div>
 
             <!-- Recent Tasks -->
-            <div class="card-frame p-6">
-                <h3 class="font-display text-sm text-arcanum-muted tracking-widest uppercase mb-4">Recent Tasks</h3>
+            <div class="card-frame p-4 sm:p-6">
+                <h3 class="font-display text-xs sm:text-sm text-arcanum-muted tracking-widest uppercase mb-3 sm:mb-4">Recent Tasks</h3>
                 <div class="space-y-3" id="taskList">
                     {% for task in tasks[-5:] %}
                     <div class="flex items-center justify-between text-sm">
@@ -370,8 +370,8 @@
             </div>
 
             <!-- Quick Actions -->
-            <div class="card-frame p-6">
-                <h3 class="font-display text-sm text-arcanum-muted tracking-widest uppercase mb-4">Quick Actions</h3>
+            <div class="card-frame p-4 sm:p-6">
+                <h3 class="font-display text-xs sm:text-sm text-arcanum-muted tracking-widest uppercase mb-3 sm:mb-4">Quick Actions</h3>
                 <div class="space-y-2">
                     <a href="/coverage" class="block w-full px-4 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg text-center text-arcanum-text font-display text-sm tracking-wide transition-colors">
                         Coverage Reports
@@ -389,7 +389,7 @@
 
     <!-- Toast Notifications -->
     <div x-show="message" x-cloak x-transition
-         class="fixed bottom-6 right-6 z-50 max-w-sm">
+         class="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 sm:max-w-sm">
         <div :class="messageType === 'success' ? 'border-green-500/50 bg-green-900/20' : 'border-red-500/50 bg-red-900/20'"
              class="card-frame border-l-4 p-4 flex items-start gap-3">
             <svg x-show="messageType === 'success'" class="w-5 h-5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -535,13 +535,13 @@ function dashboard() {
                     data.decks.forEach(deck => {
                         html += `
                             <div class="flex items-center justify-between p-3 bg-arcanum-surface rounded-lg border border-arcanum-border hover:border-mana-gold/30 transition-colors group">
-                                <div>
-                                    <span class="font-display text-arcanum-text">${deck.name}</span>
-                                    <span class="text-sm text-arcanum-muted ml-2">${deck.card_count} cards</span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="font-display text-arcanum-text text-sm sm:text-base truncate block">${deck.name}</span>
+                                    <span class="text-xs sm:text-sm text-arcanum-muted">${deck.card_count} cards</span>
                                 </div>
-                                <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onclick="viewDeck('${deck.name}')" class="p-1 text-arcanum-muted hover:text-mana-gold">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity ml-2">
+                                    <button onclick="viewDeck('${deck.name}')" class="p-2 text-arcanum-muted hover:text-mana-gold">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                         </svg>

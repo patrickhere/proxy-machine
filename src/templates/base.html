@@ -111,10 +111,12 @@
         ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
 
-        /* Mana symbol styling */
+        /* Mana symbol styling - 44px minimum for touch targets */
         .mana-btn {
-            width: 42px;
-            height: 42px;
+            width: 44px;
+            height: 44px;
+            min-width: 44px;
+            min-height: 44px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -125,6 +127,13 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        @media (min-width: 640px) {
+            .mana-btn {
+                width: 48px;
+                height: 48px;
+            }
         }
         .mana-btn::before {
             content: '';
@@ -224,6 +233,75 @@
             right: -1px;
             border-width: 0 2px 2px 0;
         }
+
+        /* Mobile-specific improvements */
+        @media (max-width: 639px) {
+            /* Reduce ambient effects on mobile for performance */
+            .noise-overlay::before {
+                display: none;
+            }
+
+            /* Better touch targets */
+            button, a, select, input {
+                min-height: 44px;
+            }
+
+            /* Stack elements better */
+            .mobile-stack {
+                flex-direction: column;
+            }
+
+            /* Full-width buttons on mobile */
+            .mobile-full {
+                width: 100%;
+            }
+
+            /* Smaller headings on mobile */
+            .mobile-text-sm {
+                font-size: 0.875rem;
+            }
+
+            /* Hide decorative elements on very small screens */
+            .mobile-hide {
+                display: none;
+            }
+
+            /* Better spacing on mobile */
+            .mobile-p-4 {
+                padding: 1rem;
+            }
+
+            /* Ensure tap targets don't overlap */
+            .touch-target {
+                padding: 12px;
+                margin: 4px 0;
+            }
+        }
+
+        /* Tablet breakpoint improvements */
+        @media (min-width: 640px) and (max-width: 1023px) {
+            .tablet-grid-2 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Improve select and input styling on iOS */
+        select, input[type="text"], input[type="number"], input[type="password"], textarea {
+            font-size: 16px; /* Prevents iOS zoom on focus */
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        /* Better active states for touch */
+        button:active, a:active {
+            transform: scale(0.98);
+        }
+
+        /* Prevent text selection on buttons */
+        button {
+            -webkit-user-select: none;
+            user-select: none;
+        }
     </style>
 
     {% block extra_head %}{% endblock %}
@@ -231,10 +309,10 @@
 <body class="h-full bg-arcanum-void text-arcanum-text noise-overlay">
     <div class="min-h-full relative" x-data="{ mobileMenuOpen: false }">
 
-        <!-- Ambient glow effect -->
-        <div class="fixed inset-0 pointer-events-none overflow-hidden">
-            <div class="absolute top-0 left-1/4 w-96 h-96 bg-glow-gold opacity-30 blur-3xl"></div>
-            <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-glow-mythic opacity-20 blur-3xl"></div>
+        <!-- Ambient glow effect (hidden on mobile for performance) -->
+        <div class="fixed inset-0 pointer-events-none overflow-hidden hidden sm:block">
+            <div class="absolute top-0 left-1/4 w-48 sm:w-96 h-48 sm:h-96 bg-glow-gold opacity-30 blur-3xl"></div>
+            <div class="absolute bottom-0 right-1/4 w-48 sm:w-96 h-48 sm:h-96 bg-glow-mythic opacity-20 blur-3xl"></div>
         </div>
 
         <!-- Navigation -->
@@ -242,17 +320,17 @@
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="flex h-20 items-center justify-between">
                     <!-- Logo -->
-                    <div class="flex items-center gap-4">
-                        <div class="relative">
-                            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-mana-gold to-amber-700 flex items-center justify-center shadow-glow">
-                                <svg class="w-7 h-7 text-arcanum-void" fill="currentColor" viewBox="0 0 24 24">
+                    <div class="flex items-center gap-2 sm:gap-4">
+                        <div class="relative flex-shrink-0">
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-mana-gold to-amber-700 flex items-center justify-center shadow-glow">
+                                <svg class="w-5 h-5 sm:w-7 sm:h-7 text-arcanum-void" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                                 </svg>
                             </div>
                         </div>
-                        <div>
-                            <h1 class="font-display text-2xl font-semibold tracking-wide text-mana-gold">The Proxy Machine</h1>
-                            <p class="text-xs text-arcanum-muted tracking-widest uppercase">Arcane Card Fabrication</p>
+                        <div class="min-w-0">
+                            <h1 class="font-display text-lg sm:text-2xl font-semibold tracking-wide text-mana-gold truncate">The Proxy Machine</h1>
+                            <p class="text-xs text-arcanum-muted tracking-widest uppercase hidden sm:block">Arcane Card Fabrication</p>
                         </div>
                     </div>
 

@@ -2714,6 +2714,7 @@ ADMIN_LOGIN_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login - The Proxy Machine</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
@@ -2845,6 +2846,7 @@ ADMIN_DASHBOARD_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - The Proxy Machine</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
@@ -2855,56 +2857,82 @@ ADMIN_DASHBOARD_TEMPLATE = """
             background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
             min-height: 100vh;
             margin: 0;
-            padding: 20px;
+            padding: 12px;
             color: #e8e6e3;
+        }
+        @media (min-width: 640px) {
+            body { padding: 20px; }
         }
         .container { max-width: 1000px; margin: 0 auto; }
         h1 {
             font-family: 'Cinzel', serif;
             font-weight: 600;
             color: #D4AF37;
-            font-size: 2rem;
-            margin: 0 0 30px 0;
+            font-size: 1.25rem;
+            margin: 0 0 20px 0;
             padding-bottom: 15px;
             border-bottom: 1px solid rgba(212,175,55,0.3);
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 12px;
+        }
+        @media (min-width: 640px) {
+            h1 {
+                font-size: 2rem;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 30px;
+            }
         }
         h2 {
             font-family: 'Cinzel', serif;
             color: #D4AF37;
-            font-size: 1.25rem;
-            margin: 0 0 15px 0;
+            font-size: 1.1rem;
+            margin: 0 0 12px 0;
             letter-spacing: 0.03em;
+        }
+        @media (min-width: 640px) {
+            h2 { font-size: 1.25rem; margin-bottom: 15px; }
         }
         h3 {
             font-family: 'Cinzel', serif;
             color: #c9b896;
-            font-size: 1rem;
-            margin: 20px 0 10px 0;
+            font-size: 0.9rem;
+            margin: 16px 0 8px 0;
+        }
+        @media (min-width: 640px) {
+            h3 { font-size: 1rem; margin: 20px 0 10px 0; }
         }
         .section {
             background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
             border: 1px solid rgba(212,175,55,0.2);
             border-radius: 12px;
-            padding: 24px;
-            margin: 20px 0;
+            padding: 16px;
+            margin: 16px 0;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        @media (min-width: 640px) {
+            .section { padding: 24px; margin: 20px 0; }
         }
         .btn {
             display: inline-block;
             background: linear-gradient(135deg, #2a2a3a 0%, #1a1a24 100%);
             color: #e8e6e3;
             border: 1px solid rgba(212,175,55,0.3);
-            padding: 10px 20px;
+            padding: 10px 16px;
             cursor: pointer;
             border-radius: 6px;
             text-decoration: none;
-            margin: 5px 5px 5px 0;
+            margin: 4px 4px 4px 0;
             font-family: 'Cinzel', serif;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             transition: all 0.2s;
+            min-height: 44px;
+            text-align: center;
+        }
+        @media (min-width: 640px) {
+            .btn { padding: 10px 20px; font-size: 0.85rem; margin: 5px 5px 5px 0; }
         }
         .btn:hover {
             border-color: rgba(212,175,55,0.6);
@@ -2922,25 +2950,46 @@ ADMIN_DASHBOARD_TEMPLATE = """
             border-color: transparent;
         }
         .btn-success:hover { box-shadow: 0 4px 15px rgba(212,175,55,0.4); }
+        .btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .btn-row .btn { margin: 0; }
+        @media (max-width: 639px) {
+            .btn-row .btn { flex: 1 1 auto; min-width: 120px; }
+        }
         table { width: 100%; border-collapse: collapse; margin: 10px 0; }
         th, td {
             text-align: left;
-            padding: 12px 10px;
+            padding: 10px 8px;
             border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 0.85rem;
+        }
+        @media (min-width: 640px) {
+            th, td { padding: 12px 10px; font-size: 0.95rem; }
         }
         th {
             background: rgba(212,175,55,0.1);
             font-family: 'Cinzel', serif;
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             color: #D4AF37;
             letter-spacing: 0.05em;
         }
-        td { color: #c9b896; font-size: 0.95rem; }
+        @media (min-width: 640px) {
+            th { font-size: 0.85rem; }
+        }
+        td { color: #c9b896; word-break: break-word; }
         .status {
-            padding: 4px 10px;
+            padding: 4px 8px;
             border-radius: 4px;
-            font-size: 0.85em;
+            font-size: 0.75em;
             font-family: 'Cinzel', serif;
+            white-space: nowrap;
+        }
+        @media (min-width: 640px) {
+            .status { padding: 4px 10px; font-size: 0.85em; }
         }
         .status-ok {
             background: rgba(40,167,69,0.2);
@@ -2953,10 +3002,13 @@ ADMIN_DASHBOARD_TEMPLATE = """
             border: 1px solid rgba(255,193,7,0.3);
         }
         .message {
-            padding: 14px 18px;
-            margin: 15px 0;
+            padding: 12px 14px;
+            margin: 12px 0;
             border-radius: 8px;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
+        }
+        @media (min-width: 640px) {
+            .message { padding: 14px 18px; margin: 15px 0; font-size: 0.95rem; }
         }
         .message-success {
             background: rgba(40,167,69,0.15);
@@ -2969,18 +3021,30 @@ ADMIN_DASHBOARD_TEMPLATE = """
             color: #ff6b6b;
         }
         input[type="text"] {
-            padding: 10px 14px;
+            padding: 10px 12px;
             background: #0a0a0f;
             border: 1px solid #2a2a3a;
             border-radius: 6px;
             color: #e8e6e3;
             font-family: inherit;
-            font-size: 0.95rem;
-            margin-right: 10px;
+            font-size: 16px; /* Prevents iOS zoom */
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        @media (min-width: 640px) {
+            input[type="text"] { width: auto; margin-right: 10px; margin-bottom: 0; }
         }
         input[type="text"]:focus {
             outline: none;
             border-color: rgba(212,175,55,0.5);
+        }
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        @media (min-width: 640px) {
+            .form-row { flex-direction: row; align-items: center; }
         }
         .back-link {
             display: inline-block;
@@ -2988,8 +3052,13 @@ ADMIN_DASHBOARD_TEMPLATE = """
             color: #8a8a9a;
             text-decoration: none;
             transition: color 0.2s;
+            padding: 10px 0;
         }
         .back-link:hover { color: #D4AF37; }
+        /* Hide less important columns on mobile */
+        @media (max-width: 639px) {
+            .hide-mobile { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -3012,11 +3081,13 @@ ADMIN_DASHBOARD_TEMPLATE = """
                 <tr><td>Schema Version</td><td>{{ db_info.schema_version or 'N/A' }}</td></tr>
                 <tr><td>FTS5 Enabled</td><td><span class="status {{ 'status-ok' if db_info.fts5 else 'status-warn' }}">{{ 'Yes' if db_info.fts5 else 'No' }}</span></td></tr>
             </table>
-            <form method="post" action="{{ url_for('admin_sync_db') }}" style="display:inline;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-success">Sync Database</button>
-            </form>
-            <a href="{{ url_for('admin_db_maintenance_protected') }}?allow_download=1" class="btn">Refresh Index</a>
+            <div class="btn-row">
+                <form method="post" action="{{ url_for('admin_sync_db') }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-success">Sync Database</button>
+                </form>
+                <a href="{{ url_for('admin_db_maintenance_protected') }}?allow_download=1" class="btn">Refresh Index</a>
+            </div>
         </div>
 
         <div class="section">
@@ -3036,7 +3107,7 @@ ADMIN_DASHBOARD_TEMPLATE = """
                 {% endfor %}
             </table>
             <h3>Create New Profile</h3>
-            <form method="post" action="{{ url_for('admin_create_profile') }}">
+            <form method="post" action="{{ url_for('admin_create_profile') }}" class="form-row">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="text" name="profile_name" placeholder="Profile name" required>
                 <button type="submit" class="btn btn-success">Create Profile</button>
