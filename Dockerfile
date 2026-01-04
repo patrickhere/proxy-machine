@@ -21,11 +21,10 @@ COPY . /app/
 
 # Install uv and dependencies in one layer
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    export PATH="/root/.cargo/bin:$PATH" && \
-    /root/.cargo/bin/uv pip install --system -r requirements.txt
+    /root/.local/bin/uv pip install --system -r requirements.txt
 
 # Add uv to PATH for runtime
-ENV PATH="/root/.cargo/bin:$PATH"
+ENV PATH="/root/.local/bin:$PATH"
 
 # Create data directories
 RUN mkdir -p /data/shared /data/profiles /data/bulk-data /data/logs
