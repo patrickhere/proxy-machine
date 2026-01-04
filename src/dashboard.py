@@ -55,31 +55,15 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
 # CSRF Protection
 if CSRF_AVAILABLE:
     csrf = CSRFProtect(app)
-    # Exempt API routes from CSRF (they use AJAX and don't submit forms)
-    csrf.exempt("api_profiles")
-    csrf.exempt("api_profile_decks")
-    csrf.exempt("api_profiles_decks_post")
-    csrf.exempt("api_profile_pdf")
-    csrf.exempt("api_profile_upload")
-    csrf.exempt("api_profile_import_deck")
-    csrf.exempt("api_profile_download_pdf")
-    csrf.exempt("api_coverage")
-    csrf.exempt("api_search")
-    csrf.exempt("api_search_cards")
-    csrf.exempt("api_unique_art")
-    csrf.exempt("api_unique_art_counts")
-    csrf.exempt("api_rules_delta")
-    csrf.exempt("api_db_info")
-    csrf.exempt("api_set")
-    csrf.exempt("api_rulings")
-    csrf.exempt("run_action")
-    csrf.exempt("api_tasks_list")
-    csrf.exempt("api_task_status")
-    csrf.exempt("api_task_stream")
-    csrf.exempt("api_task_sync_database")
-    csrf.exempt("api_task_refresh_index")
 else:
     csrf = None
+
+
+def csrf_exempt(f):
+    """Decorator to exempt a view from CSRF protection."""
+    if csrf:
+        return csrf.exempt(f)
+    return f
 
 # Rate Limiting
 if LIMITER_AVAILABLE:
@@ -1448,6 +1432,7 @@ def index():
 
 
 @app.route("/run", methods=["POST"])
+@csrf_exempt
 def run_action():
     action = request.form.get("action")
     if action == "fetch_basics":
@@ -1481,6 +1466,7 @@ def run_action():
 
 
 @app.route("/api/profiles", methods=["GET"])
+@csrf_exempt
 def api_profiles():
     """List all available profiles."""
     try:
@@ -1508,6 +1494,7 @@ def api_profiles():
 
 
 @app.route("/api/profiles/<profile>/decks", methods=["GET"])
+@csrf_exempt
 def api_profile_decks(profile):
     """List all deck subfolders for a profile."""
     try:
@@ -1535,6 +1522,7 @@ def api_profile_decks(profile):
 
 
 @app.route("/api/profiles/<profile>/decks", methods=["POST"])
+@csrf_exempt
 def api_create_deck(profile):
     """Create a new deck subfolder for a profile."""
     try:
@@ -1683,6 +1671,7 @@ def _pdf_generation_task(
 
 
 @app.route("/api/profiles/<profile>/pdf", methods=["POST"])
+@csrf_exempt
 def api_generate_pdf(profile):
     """Generate a PDF for a profile (with optional deck selection and advanced options)."""
     try:
@@ -1764,6 +1753,7 @@ def _sanitize_filename(filename: str) -> str:
 
 
 @app.route("/api/profiles/<profile>/upload", methods=["POST"])
+@csrf_exempt
 def api_upload_images(profile):
     """Upload card images to a profile's folders."""
     try:
@@ -1847,6 +1837,7 @@ def api_upload_images(profile):
 
 
 @app.route("/api/profiles/<profile>/import-deck", methods=["POST"])
+@csrf_exempt
 def api_import_deck(profile):
     """Import and analyze a deck list, fetching card images."""
     try:
@@ -1996,6 +1987,7 @@ def _import_deck_task(
 
 
 @app.route("/api/profiles/<profile>/download-latest-pdf", methods=["GET"])
+@csrf_exempt
 def api_download_latest_pdf(profile):
     """Download the most recently generated PDF for a profile."""
     try:
@@ -2178,6 +2170,7 @@ def coverage_view():
 
 
 @app.route("/api/coverage", methods=["GET"])
+@csrf_exempt
 def api_coverage():
     kind = (request.args.get("kind") or "nonbasic").lower()
     set_code = request.args.get("set") or None
@@ -2378,6 +2371,7 @@ def unique_art_view():
 
 
 @app.route("/api/search", methods=["GET"])
+@csrf_exempt
 def api_search():
     query = request.args.get("query") or ""
     set_code = (request.args.get("set") or "").strip().lower() or None
@@ -2392,6 +2386,7 @@ def api_search():
 
 
 @app.route("/api/unique_art", methods=["GET"])
+@csrf_exempt
 def api_unique_art():
     name = (request.args.get("name") or "").strip()
     oracle_id = (request.args.get("oracle_id") or "").strip() or None
@@ -2450,6 +2445,7 @@ def api_unique_art():
 
 
 @app.route("/api/unique_art/counts", methods=["GET"])
+@csrf_exempt
 def api_unique_art_counts():
     name = (request.args.get("name") or "").strip()
     oracle_id = (request.args.get("oracle_id") or "").strip() or None
@@ -2599,6 +2595,7 @@ def rules_delta_page():
 
 
 @app.route("/api/rules_delta", methods=["GET"])
+@csrf_exempt
 def api_rules_delta():
     import importlib.util
 
@@ -2706,6 +2703,7 @@ def _bulk_db_info() -> dict:
 
 
 @app.route("/api/db_info", methods=["GET"])
+@csrf_exempt
 def api_db_info():
     return jsonify(_bulk_db_info())
 
@@ -2745,6 +2743,7 @@ def admin_db_maintenance():
 
 # --- Phase 3: Additional JSON endpoints ---
 @app.route("/api/set", methods=["GET"])
+@csrf_exempt
 def api_set():
     code = (request.args.get("code") or "").strip().lower()
     if not code:
@@ -2757,6 +2756,7 @@ def api_set():
 
 
 @app.route("/api/rulings", methods=["GET"])
+@csrf_exempt
 def api_rulings():
     oracle_id = (request.args.get("oracle_id") or "").strip() or None
     name = (request.args.get("name") or "").strip()
@@ -2777,6 +2777,7 @@ def api_rulings():
 
 
 @app.route("/api/search/cards", methods=["GET"])
+@csrf_exempt
 def api_search_cards():
     """Advanced card search with filters for colors, type, rarity, CMC, and set.
 
@@ -2859,6 +2860,7 @@ def api_search_cards():
 
 
 @app.route("/api/tasks", methods=["GET"])
+@csrf_exempt
 def api_tasks_list():
     """List all tasks (recent and running)."""
     with TASK_REGISTRY_LOCK:
@@ -2869,6 +2871,7 @@ def api_tasks_list():
 
 
 @app.route("/api/tasks/<task_id>", methods=["GET"])
+@csrf_exempt
 def api_task_status(task_id):
     """Get status of a specific task."""
     task = get_task(task_id)
@@ -2878,6 +2881,7 @@ def api_task_status(task_id):
 
 
 @app.route("/api/tasks/<task_id>/stream")
+@csrf_exempt
 def api_task_stream(task_id):
     """Stream task progress using Server-Sent Events (SSE)."""
     task = get_task(task_id)
@@ -2919,6 +2923,7 @@ def api_task_stream(task_id):
 
 
 @app.route("/api/tasks/sync-database", methods=["POST"])
+@csrf_exempt
 def api_task_sync_database():
     """Start a database sync task."""
     # Check if already running
@@ -2936,6 +2941,7 @@ def api_task_sync_database():
 
 
 @app.route("/api/tasks/refresh-index", methods=["POST"])
+@csrf_exempt
 def api_task_refresh_index():
     """Start an index refresh task."""
     allow_download = (
