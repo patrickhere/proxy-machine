@@ -354,6 +354,7 @@ def fetch_tokens_clean(
 
 if __name__ == "__main__":
     # Test the clean token fetch
+    import os
     import sys
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

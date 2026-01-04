@@ -1,4 +1,6 @@
 import argparse
+import hashlib
+import hmac
 import io
 import os
 import threading
@@ -20,6 +22,20 @@ from flask import (
     session,
 )
 
+# Security imports
+try:
+    from flask_wtf.csrf import CSRFProtect
+    CSRF_AVAILABLE = True
+except ImportError:
+    CSRF_AVAILABLE = False
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    LIMITER_AVAILABLE = True
+except ImportError:
+    LIMITER_AVAILABLE = False
+
 import create_pdf
 import scryfall_enrich
 
@@ -35,8 +51,65 @@ except Exception:  # pragma: no cover
 app = Flask(__name__, template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
 
+# CSRF Protection
+if CSRF_AVAILABLE:
+    csrf = CSRFProtect(app)
+else:
+    csrf = None
+
+# Rate Limiting
+if LIMITER_AVAILABLE:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri="memory://",
+    )
+else:
+    limiter = None
+
 # Admin authentication
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+# Login attempt tracking for rate limiting
+LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+LOGIN_ATTEMPT_LOCK = threading.Lock()
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 300  # 5 minutes
+
+
+def _check_login_rate_limit(ip: str) -> tuple[bool, int]:
+    """Check if IP is rate limited. Returns (is_allowed, seconds_remaining)."""
+    now = time.time()
+    with LOGIN_ATTEMPT_LOCK:
+        if ip not in LOGIN_ATTEMPTS:
+            return True, 0
+        # Clean old attempts
+        LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_LOCKOUT_SECONDS]
+        if len(LOGIN_ATTEMPTS[ip]) >= MAX_LOGIN_ATTEMPTS:
+            oldest = min(LOGIN_ATTEMPTS[ip])
+            remaining = int(LOGIN_LOCKOUT_SECONDS - (now - oldest))
+            return False, max(0, remaining)
+        return True, 0
+
+
+def _record_login_attempt(ip: str) -> None:
+    """Record a failed login attempt."""
+    with LOGIN_ATTEMPT_LOCK:
+        if ip not in LOGIN_ATTEMPTS:
+            LOGIN_ATTEMPTS[ip] = []
+        LOGIN_ATTEMPTS[ip].append(time.time())
+
+
+def _clear_login_attempts(ip: str) -> None:
+    """Clear login attempts after successful login."""
+    with LOGIN_ATTEMPT_LOCK:
+        LOGIN_ATTEMPTS.pop(ip, None)
+
+
+def _secure_compare(a: str, b: str) -> bool:
+    """Timing-safe string comparison to prevent timing attacks."""
+    return hmac.compare_digest(a.encode(), b.encode())
 
 TASKS: list[dict] = []
 TASK_LOCK = threading.Lock()
@@ -50,13 +123,17 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not ADMIN_PASSWORD:
-            return render_template_string(
-                "<h1>Admin Disabled</h1><p>Set ADMIN_PASSWORD environment variable to enable admin features.</p>"
-                "<p><a href='/'>Back to Dashboard</a></p>"
-            ), 403
+            return (
+                render_template_string(
+                    "<h1>Admin Disabled</h1><p>Set ADMIN_PASSWORD environment variable to enable admin features.</p>"
+                    "<p><a href='/'>Back to Dashboard</a></p>"
+                ),
+                403,
+            )
         if not session.get("admin_authenticated"):
             return redirect(url_for("admin_login", next=request.url))
         return f(*args, **kwargs)
+
     return decorated_function
 
 
@@ -1410,6 +1487,46 @@ def api_generate_pdf(profile):
         return jsonify({"error": str(e)}), 500
 
 
+# File upload validation constants
+ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+MAX_FILE_SIZE_MB = 50  # 50MB per file
+MAX_TOTAL_UPLOAD_MB = 500  # 500MB total per request
+
+
+def _validate_upload_file(file) -> tuple[bool, str]:
+    """Validate an uploaded file. Returns (is_valid, error_message)."""
+    if not file or not file.filename:
+        return False, "Empty file"
+
+    # Check extension
+    ext = os.path.splitext(file.filename.lower())[1]
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return False, f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
+
+    # Check file size (seek to end and back)
+    file.seek(0, 2)  # Seek to end
+    size = file.tell()
+    file.seek(0)  # Seek back to start
+
+    if size > MAX_FILE_SIZE_MB * 1024 * 1024:
+        return False, f"File too large: {size / 1024 / 1024:.1f}MB (max {MAX_FILE_SIZE_MB}MB)"
+
+    return True, ""
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Sanitize filename to prevent path traversal and other issues."""
+    # Get just the filename without any path components
+    filename = os.path.basename(filename)
+    # Remove any null bytes or special characters
+    filename = filename.replace('\x00', '').replace('/', '').replace('\\', '')
+    # Limit length
+    name, ext = os.path.splitext(filename)
+    if len(name) > 200:
+        name = name[:200]
+    return name + ext
+
+
 @app.route("/api/profiles/<profile>/upload", methods=["POST"])
 def api_upload_images(profile):
     """Upload card images to a profile's folders."""
@@ -1431,6 +1548,18 @@ def api_upload_images(profile):
         if not files:
             return jsonify({"error": "No files provided"}), 400
 
+        # Validate total upload size
+        total_size = 0
+        for file in files:
+            file.seek(0, 2)
+            total_size += file.tell()
+            file.seek(0)
+
+        if total_size > MAX_TOTAL_UPLOAD_MB * 1024 * 1024:
+            return jsonify({
+                "error": f"Total upload too large: {total_size / 1024 / 1024:.1f}MB (max {MAX_TOTAL_UPLOAD_MB}MB)"
+            }), 400
+
         # Determine target directory
         if face == "front":
             target_dir = front_dir
@@ -1443,25 +1572,35 @@ def api_upload_images(profile):
 
         # Apply deck subdirectory if specified
         if deck:
-            target_dir = os.path.join(target_dir, deck)
+            # Sanitize deck name
+            safe_deck = "".join(c for c in deck if c.isalnum() or c in "-_").lower()
+            if not safe_deck:
+                return jsonify({"error": "Invalid deck name"}), 400
+            target_dir = os.path.join(target_dir, safe_deck)
 
         # Create directory if it doesn't exist
         os.makedirs(target_dir, exist_ok=True)
 
-        # Save files
+        # Validate and save files
         uploaded_count = 0
+        errors = []
         for file in files:
-            if file and file.filename:
-                # Sanitize filename
-                filename = os.path.basename(file.filename)
-                filepath = os.path.join(target_dir, filename)
-                file.save(filepath)
-                uploaded_count += 1
+            is_valid, error = _validate_upload_file(file)
+            if not is_valid:
+                errors.append(f"{file.filename}: {error}")
+                continue
+
+            # Sanitize filename
+            filename = _sanitize_filename(file.filename)
+            filepath = os.path.join(target_dir, filename)
+            file.save(filepath)
+            uploaded_count += 1
 
         rel_path = os.path.relpath(target_dir, create_pdf.project_root_directory)
-        return jsonify(
-            {"success": True, "uploaded": uploaded_count, "destination": rel_path}
-        )
+        result = {"success": True, "uploaded": uploaded_count, "destination": rel_path}
+        if errors:
+            result["errors"] = errors
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2584,22 +2723,40 @@ ADMIN_DASHBOARD_TEMPLATE = """
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if not ADMIN_PASSWORD:
-        return render_template_string(
-            "<h1>Admin Disabled</h1><p>Set ADMIN_PASSWORD environment variable to enable.</p>"
-            "<p><a href='/'>Back</a></p>"
-        ), 403
+        return (
+            render_template_string(
+                "<h1>Admin Disabled</h1><p>Set ADMIN_PASSWORD environment variable to enable.</p>"
+                "<p><a href='/'>Back</a></p>"
+            ),
+            403,
+        )
 
     error = None
     next_url = request.args.get("next", url_for("admin_dashboard"))
+    client_ip = request.remote_addr or "unknown"
+
+    # Check rate limit
+    is_allowed, seconds_remaining = _check_login_rate_limit(client_ip)
+    if not is_allowed:
+        error = f"Too many login attempts. Please try again in {seconds_remaining} seconds."
+        return render_template_string(ADMIN_LOGIN_TEMPLATE, error=error, next_url=next_url), 429
 
     if request.method == "POST":
         password = request.form.get("password", "")
         next_url = request.form.get("next", url_for("admin_dashboard"))
-        if password == ADMIN_PASSWORD:
+        # Use timing-safe comparison to prevent timing attacks
+        if _secure_compare(password, ADMIN_PASSWORD):
             session["admin_authenticated"] = True
+            session.permanent = True  # Session persists
+            _clear_login_attempts(client_ip)
             return redirect(next_url)
         else:
-            error = "Invalid password"
+            _record_login_attempt(client_ip)
+            attempts_left = MAX_LOGIN_ATTEMPTS - len(LOGIN_ATTEMPTS.get(client_ip, []))
+            if attempts_left > 0:
+                error = f"Invalid password. {attempts_left} attempts remaining."
+            else:
+                error = f"Too many failed attempts. Locked out for {LOGIN_LOCKOUT_SECONDS // 60} minutes."
 
     return render_template_string(ADMIN_LOGIN_TEMPLATE, error=error, next_url=next_url)
 
@@ -2621,14 +2778,21 @@ def admin_dashboard():
 
     # Get profiles
     profiles = []
-    profiles_root = os.environ.get("PROFILES_ROOT", os.path.join(create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"))
+    profiles_root = os.environ.get(
+        "PROFILES_ROOT",
+        os.path.join(
+            create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"
+        ),
+    )
     if os.path.isdir(profiles_root):
         for entry in os.scandir(profiles_root):
             if entry.is_dir() and not entry.name.startswith("."):
                 deck_count = 0
                 decks_dir = os.path.join(entry.path, "decklist")
                 if os.path.isdir(decks_dir):
-                    deck_count = len([f for f in os.listdir(decks_dir) if f.endswith(".txt")])
+                    deck_count = len(
+                        [f for f in os.listdir(decks_dir) if f.endswith(".txt")]
+                    )
                 profiles.append({"name": entry.name, "deck_count": deck_count})
 
     return render_template_string(
@@ -2656,9 +2820,19 @@ def admin_sync_db():
         finally:
             if orig_offline is not None:
                 os.environ["PM_OFFLINE"] = orig_offline
-        return redirect(url_for("admin_dashboard", message="Database synced successfully", message_type="success"))
+        return redirect(
+            url_for(
+                "admin_dashboard",
+                message="Database synced successfully",
+                message_type="success",
+            )
+        )
     except Exception as e:
-        return redirect(url_for("admin_dashboard", message=f"Sync failed: {e}", message_type="error"))
+        return redirect(
+            url_for(
+                "admin_dashboard", message=f"Sync failed: {e}", message_type="error"
+            )
+        )
 
 
 @app.route("/admin/create_profile", methods=["POST"])
@@ -2666,35 +2840,77 @@ def admin_sync_db():
 def admin_create_profile():
     profile_name = request.form.get("profile_name", "").strip()
     if not profile_name:
-        return redirect(url_for("admin_dashboard", message="Profile name required", message_type="error"))
+        return redirect(
+            url_for(
+                "admin_dashboard", message="Profile name required", message_type="error"
+            )
+        )
 
     # Sanitize profile name
     safe_name = "".join(c for c in profile_name if c.isalnum() or c in "-_").lower()
     if not safe_name:
-        return redirect(url_for("admin_dashboard", message="Invalid profile name", message_type="error"))
+        return redirect(
+            url_for(
+                "admin_dashboard", message="Invalid profile name", message_type="error"
+            )
+        )
 
-    profiles_root = os.environ.get("PROFILES_ROOT", os.path.join(create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"))
+    profiles_root = os.environ.get(
+        "PROFILES_ROOT",
+        os.path.join(
+            create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"
+        ),
+    )
     profile_path = os.path.join(profiles_root, safe_name)
 
     if os.path.exists(profile_path):
-        return redirect(url_for("admin_dashboard", message=f"Profile '{safe_name}' already exists", message_type="error"))
+        return redirect(
+            url_for(
+                "admin_dashboard",
+                message=f"Profile '{safe_name}' already exists",
+                message_type="error",
+            )
+        )
 
     try:
         os.makedirs(os.path.join(profile_path, "decklist"), exist_ok=True)
         os.makedirs(os.path.join(profile_path, "output"), exist_ok=True)
-        return redirect(url_for("admin_dashboard", message=f"Profile '{safe_name}' created", message_type="success"))
+        return redirect(
+            url_for(
+                "admin_dashboard",
+                message=f"Profile '{safe_name}' created",
+                message_type="success",
+            )
+        )
     except Exception as e:
-        return redirect(url_for("admin_dashboard", message=f"Failed to create profile: {e}", message_type="error"))
+        return redirect(
+            url_for(
+                "admin_dashboard",
+                message=f"Failed to create profile: {e}",
+                message_type="error",
+            )
+        )
 
 
 @app.route("/admin/profile/<name>")
 @admin_required
 def admin_view_profile(name):
-    profiles_root = os.environ.get("PROFILES_ROOT", os.path.join(create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"))
+    profiles_root = os.environ.get(
+        "PROFILES_ROOT",
+        os.path.join(
+            create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"
+        ),
+    )
     profile_path = os.path.join(profiles_root, name)
 
     if not os.path.isdir(profile_path):
-        return redirect(url_for("admin_dashboard", message=f"Profile '{name}' not found", message_type="error"))
+        return redirect(
+            url_for(
+                "admin_dashboard",
+                message=f"Profile '{name}' not found",
+                message_type="error",
+            )
+        )
 
     decks = []
     decks_dir = os.path.join(profile_path, "decklist")
@@ -2748,7 +2964,13 @@ def admin_db_maintenance_protected():
         else:
             os.environ["PM_OFFLINE"] = orig_offline
 
-    return redirect(url_for("admin_dashboard", message="Database index refreshed", message_type="success"))
+    return redirect(
+        url_for(
+            "admin_dashboard",
+            message="Database index refreshed",
+            message_type="success",
+        )
+    )
 
 
 if __name__ == "__main__":
