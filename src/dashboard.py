@@ -73,6 +73,11 @@ if CSRF_AVAILABLE:
     csrf.exempt("api_set")
     csrf.exempt("api_rulings")
     csrf.exempt("run_action")
+    csrf.exempt("api_tasks_list")
+    csrf.exempt("api_task_status")
+    csrf.exempt("api_task_stream")
+    csrf.exempt("api_task_sync_database")
+    csrf.exempt("api_task_refresh_index")
 else:
     csrf = None
 
@@ -95,6 +100,205 @@ LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 LOGIN_ATTEMPT_LOCK = threading.Lock()
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_SECONDS = 300  # 5 minutes
+
+# =============================================================================
+# Background Task System
+# =============================================================================
+
+
+class BackgroundTask:
+    """Represents a background task with progress tracking."""
+
+    def __init__(self, task_id: str, name: str, task_type: str):
+        self.id = task_id
+        self.name = name
+        self.task_type = task_type
+        self.status = "pending"  # pending, running, completed, failed
+        self.progress = 0  # 0-100
+        self.message = "Waiting to start..."
+        self.result = None
+        self.error = None
+        self.started_at = None
+        self.completed_at = None
+        self.created_at = datetime.now(timezone.utc)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "type": self.task_type,
+            "status": self.status,
+            "progress": self.progress,
+            "message": self.message,
+            "error": self.error,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+# Task registry - stores all running and recent tasks
+TASK_REGISTRY: dict[str, BackgroundTask] = {}
+TASK_REGISTRY_LOCK = threading.Lock()
+MAX_TASK_HISTORY = 50  # Keep last N completed tasks
+
+
+def create_task(name: str, task_type: str) -> BackgroundTask:
+    """Create a new background task and register it."""
+    task_id = str(uuid.uuid4())[:8]
+    task = BackgroundTask(task_id, name, task_type)
+
+    with TASK_REGISTRY_LOCK:
+        TASK_REGISTRY[task_id] = task
+        # Cleanup old completed tasks
+        _cleanup_old_tasks()
+
+    return task
+
+
+def _cleanup_old_tasks():
+    """Remove old completed tasks to prevent memory bloat."""
+    completed = [
+        (tid, t)
+        for tid, t in TASK_REGISTRY.items()
+        if t.status in ("completed", "failed")
+    ]
+    if len(completed) > MAX_TASK_HISTORY:
+        # Sort by completion time, remove oldest
+        completed.sort(key=lambda x: x[1].completed_at or x[1].created_at)
+        for tid, _ in completed[:-MAX_TASK_HISTORY]:
+            del TASK_REGISTRY[tid]
+
+
+def get_task(task_id: str) -> BackgroundTask | None:
+    """Get a task by ID."""
+    with TASK_REGISTRY_LOCK:
+        return TASK_REGISTRY.get(task_id)
+
+
+def run_task_in_background(task: BackgroundTask, func, *args, **kwargs):
+    """Run a function in a background thread with progress tracking."""
+
+    def wrapper():
+        task.status = "running"
+        task.started_at = datetime.now(timezone.utc)
+        try:
+            result = func(task, *args, **kwargs)
+            task.result = result
+            task.status = "completed"
+            task.progress = 100
+            task.message = "Completed successfully"
+        except Exception as e:
+            task.status = "failed"
+            task.error = str(e)
+            task.message = f"Failed: {e}"
+        finally:
+            task.completed_at = datetime.now(timezone.utc)
+
+    thread = threading.Thread(target=wrapper, daemon=True)
+    thread.start()
+    return thread
+
+
+# Task implementations
+
+
+def _task_sync_database(task: BackgroundTask):
+    """Background task: Sync database from Scryfall."""
+    import subprocess
+
+    task.message = "Starting database sync..."
+    task.progress = 5
+
+    # Run bulk sync command
+    task.message = "Downloading bulk data from Scryfall..."
+    task.progress = 10
+
+    try:
+        # Get project root
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+
+        # Run the make bulk-sync command with progress simulation
+        process = subprocess.Popen(
+            ["make", "bulk-sync"],
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        # Read output and update progress
+        lines_seen = 0
+        for line in iter(process.stdout.readline, ""):
+            lines_seen += 1
+            # Update message with last line
+            if line.strip():
+                task.message = line.strip()[:100]
+
+            # Simulate progress based on output lines
+            # Bulk sync typically outputs 100-500 lines
+            progress = min(10 + (lines_seen // 5), 95)
+            task.progress = progress
+
+        process.wait()
+
+        if process.returncode != 0:
+            raise Exception(f"Sync failed with exit code {process.returncode}")
+
+        task.progress = 100
+        task.message = "Database sync completed successfully"
+        return {"success": True}
+
+    except Exception as e:
+        raise Exception(f"Database sync failed: {e}")
+
+
+def _task_refresh_index(task: BackgroundTask, allow_download: bool = False):
+    """Background task: Refresh database index."""
+    task.message = "Starting index refresh..."
+    task.progress = 10
+
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+
+        cmd = ["make", "bulk-index-rebuild"]
+        if allow_download:
+            task.message = "Downloading and rebuilding index..."
+        else:
+            task.message = "Rebuilding index from existing files..."
+
+        task.progress = 20
+
+        process = subprocess.Popen(
+            cmd,
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        lines_seen = 0
+        for line in iter(process.stdout.readline, ""):
+            lines_seen += 1
+            if line.strip():
+                task.message = line.strip()[:100]
+            task.progress = min(20 + (lines_seen // 3), 95)
+
+        process.wait()
+
+        if process.returncode != 0:
+            raise Exception(f"Index rebuild failed with exit code {process.returncode}")
+
+        task.progress = 100
+        task.message = "Index refresh completed"
+        return {"success": True}
+
+    except Exception as e:
+        raise Exception(f"Index refresh failed: {e}")
 
 
 def _check_login_rate_limit(ip: str) -> tuple[bool, int]:
@@ -2645,6 +2849,101 @@ def api_search_cards():
         return jsonify({"cards": [], "count": 0, "error": str(e)})
 
 
+# =============================================================================
+# Background Task API Endpoints
+# =============================================================================
+
+
+@app.route("/api/tasks", methods=["GET"])
+def api_tasks_list():
+    """List all tasks (recent and running)."""
+    with TASK_REGISTRY_LOCK:
+        tasks = [t.to_dict() for t in TASK_REGISTRY.values()]
+    # Sort by created_at descending
+    tasks.sort(key=lambda x: x["created_at"], reverse=True)
+    return jsonify({"tasks": tasks[:20]})  # Return last 20
+
+
+@app.route("/api/tasks/<task_id>", methods=["GET"])
+def api_task_status(task_id):
+    """Get status of a specific task."""
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    return jsonify(task.to_dict())
+
+
+@app.route("/api/tasks/<task_id>/stream")
+def api_task_stream(task_id):
+    """Stream task progress using Server-Sent Events (SSE)."""
+    task = get_task(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+
+    def generate():
+        last_progress = -1
+        last_message = ""
+        while True:
+            task = get_task(task_id)
+            if not task:
+                yield f"data: {{'error': 'Task not found'}}\n\n"
+                break
+
+            # Only send if something changed
+            if task.progress != last_progress or task.message != last_message:
+                import json
+
+                data = json.dumps(task.to_dict())
+                yield f"data: {data}\n\n"
+                last_progress = task.progress
+                last_message = task.message
+
+            # Stop streaming when task is done
+            if task.status in ("completed", "failed"):
+                break
+
+            time.sleep(0.5)  # Poll every 500ms
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
+@app.route("/api/tasks/sync-database", methods=["POST"])
+def api_task_sync_database():
+    """Start a database sync task."""
+    # Check if already running
+    with TASK_REGISTRY_LOCK:
+        for t in TASK_REGISTRY.values():
+            if t.task_type == "sync_database" and t.status == "running":
+                return jsonify({"error": "Sync already in progress", "task_id": t.id}), 409
+
+    task = create_task("Database Sync", "sync_database")
+    run_task_in_background(task, _task_sync_database)
+    return jsonify({"task_id": task.id, "message": "Sync started"})
+
+
+@app.route("/api/tasks/refresh-index", methods=["POST"])
+def api_task_refresh_index():
+    """Start an index refresh task."""
+    allow_download = request.json.get("allow_download", False) if request.is_json else False
+
+    # Check if already running
+    with TASK_REGISTRY_LOCK:
+        for t in TASK_REGISTRY.values():
+            if t.task_type == "refresh_index" and t.status == "running":
+                return jsonify({"error": "Refresh already in progress", "task_id": t.id}), 409
+
+    task = create_task("Index Refresh", "refresh_index")
+    run_task_in_background(task, _task_refresh_index, allow_download)
+    return jsonify({"task_id": task.id, "message": "Refresh started"})
+
+
 NOTIFICATIONS_TEMPLATE = """
 <!doctype html>
 <title>Notification Settings</title>
@@ -3059,6 +3358,53 @@ ADMIN_DASHBOARD_TEMPLATE = """
         @media (max-width: 639px) {
             .hide-mobile { display: none; }
         }
+        /* Progress bar styles */
+        .progress-container {
+            margin-top: 16px;
+            display: none;
+        }
+        .progress-container.active {
+            display: block;
+        }
+        .progress-bar-wrapper {
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            height: 24px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar {
+            background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 6px;
+        }
+        .progress-bar.indeterminate {
+            width: 30%;
+            animation: indeterminate 1.5s infinite;
+        }
+        @keyframes indeterminate {
+            0% { margin-left: -30%; }
+            100% { margin-left: 100%; }
+        }
+        .progress-text {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: #c9b896;
+        }
+        .progress-message {
+            color: #8a8a9a;
+            font-size: 0.8rem;
+            margin-top: 4px;
+            word-break: break-word;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
     </style>
 </head>
 <body>
@@ -3082,11 +3428,18 @@ ADMIN_DASHBOARD_TEMPLATE = """
                 <tr><td>FTS5 Enabled</td><td><span class="status {{ 'status-ok' if db_info.fts5 else 'status-warn' }}">{{ 'Yes' if db_info.fts5 else 'No' }}</span></td></tr>
             </table>
             <div class="btn-row">
-                <form method="post" action="{{ url_for('admin_sync_db') }}" style="display:inline;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-success">Sync Database</button>
-                </form>
-                <a href="{{ url_for('admin_db_maintenance_protected') }}?allow_download=1" class="btn">Refresh Index</a>
+                <button type="button" id="syncBtn" class="btn btn-success" onclick="startSyncDatabase()">Sync Database</button>
+                <button type="button" id="refreshBtn" class="btn" onclick="startRefreshIndex()">Refresh Index</button>
+            </div>
+            <!-- Progress indicator -->
+            <div id="dbProgress" class="progress-container">
+                <div class="progress-bar-wrapper">
+                    <div id="dbProgressBar" class="progress-bar"></div>
+                </div>
+                <div class="progress-text">
+                    <span id="dbProgressPercent">0%</span>
+                </div>
+                <div id="dbProgressMessage" class="progress-message">Starting...</div>
             </div>
         </div>
 
@@ -3127,6 +3480,135 @@ ADMIN_DASHBOARD_TEMPLATE = """
 
         <a href="/" class="back-link">Return to Dashboard</a>
     </div>
+
+    <script>
+        let currentEventSource = null;
+
+        function showProgress(show) {
+            const container = document.getElementById('dbProgress');
+            if (show) {
+                container.classList.add('active');
+            } else {
+                container.classList.remove('active');
+            }
+        }
+
+        function updateProgress(percent, message, indeterminate = false) {
+            const bar = document.getElementById('dbProgressBar');
+            const percentText = document.getElementById('dbProgressPercent');
+            const messageText = document.getElementById('dbProgressMessage');
+
+            if (indeterminate) {
+                bar.classList.add('indeterminate');
+                bar.style.width = '30%';
+                percentText.textContent = '...';
+            } else {
+                bar.classList.remove('indeterminate');
+                bar.style.width = percent + '%';
+                percentText.textContent = Math.round(percent) + '%';
+            }
+            messageText.textContent = message || 'Processing...';
+        }
+
+        function setButtonsDisabled(disabled) {
+            document.getElementById('syncBtn').disabled = disabled;
+            document.getElementById('refreshBtn').disabled = disabled;
+        }
+
+        function connectToTaskStream(taskId) {
+            if (currentEventSource) {
+                currentEventSource.close();
+            }
+
+            currentEventSource = new EventSource('/api/tasks/' + taskId + '/stream');
+
+            currentEventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+
+                if (data.status === 'completed') {
+                    updateProgress(100, data.message || 'Completed successfully!');
+                    currentEventSource.close();
+                    setButtonsDisabled(false);
+                    // Reload page after short delay to show updated stats
+                    setTimeout(function() {
+                        window.location.href = '/admin?message=' + encodeURIComponent('Task completed successfully') + '&message_type=success';
+                    }, 1500);
+                } else if (data.status === 'failed') {
+                    updateProgress(0, 'Error: ' + (data.error || data.message || 'Unknown error'));
+                    document.getElementById('dbProgressBar').style.background = 'linear-gradient(135deg, #dc3545 0%, #a71d2a 100%)';
+                    currentEventSource.close();
+                    setButtonsDisabled(false);
+                } else if (data.status === 'running') {
+                    const progress = data.progress || 0;
+                    updateProgress(progress, data.message, progress === 0);
+                } else {
+                    updateProgress(0, data.message || 'Starting...', true);
+                }
+            };
+
+            currentEventSource.onerror = function() {
+                currentEventSource.close();
+                updateProgress(0, 'Connection lost. Check server logs.');
+                setButtonsDisabled(false);
+            };
+        }
+
+        function startSyncDatabase() {
+            setButtonsDisabled(true);
+            showProgress(true);
+            // Reset bar color
+            document.getElementById('dbProgressBar').style.background = 'linear-gradient(135deg, #D4AF37 0%, #B8960C 100%)';
+            updateProgress(0, 'Starting database sync...', true);
+
+            fetch('/api/tasks/sync-database', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.task_id) {
+                    connectToTaskStream(data.task_id);
+                } else if (data.error) {
+                    updateProgress(0, 'Error: ' + data.error);
+                    setButtonsDisabled(false);
+                }
+            })
+            .catch(error => {
+                updateProgress(0, 'Failed to start task: ' + error.message);
+                setButtonsDisabled(false);
+            });
+        }
+
+        function startRefreshIndex() {
+            setButtonsDisabled(true);
+            showProgress(true);
+            // Reset bar color
+            document.getElementById('dbProgressBar').style.background = 'linear-gradient(135deg, #D4AF37 0%, #B8960C 100%)';
+            updateProgress(0, 'Starting index refresh...', true);
+
+            fetch('/api/tasks/refresh-index', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.task_id) {
+                    connectToTaskStream(data.task_id);
+                } else if (data.error) {
+                    updateProgress(0, 'Error: ' + data.error);
+                    setButtonsDisabled(false);
+                }
+            })
+            .catch(error => {
+                updateProgress(0, 'Failed to start task: ' + error.message);
+                setButtonsDisabled(false);
+            });
+        }
+    </script>
 </body>
 </html>
 """
