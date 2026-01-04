@@ -64,9 +64,34 @@ EXPECTED_SCHEMA_VERSION = 6  # Added card_relationships table
 
 # Paths are resolved via bulk_paths to support legacy layouts during migration
 BULK_DIR = str(get_bulk_data_directory())
-ALL_CARDS_GZ = str(bulk_file_path("all-cards.json.gz"))
-ORACLE_GZ = str(bulk_file_path("oracle-cards.json.gz"))
 DB_PATH = str(bulk_db_path())
+
+
+def _find_bulk_file(base_name: str) -> str:
+    """Find bulk file, checking both .json and .json.gz extensions."""
+    for ext in [".json", ".json.gz"]:
+        path = str(bulk_file_path(f"{base_name}{ext}"))
+        if os.path.exists(path):
+            return path
+    # Return .json as default (Scryfall's current format)
+    return str(bulk_file_path(f"{base_name}.json"))
+
+
+# These are resolved dynamically to find the actual file
+def _get_all_cards_path() -> str:
+    return _find_bulk_file("all-cards")
+
+
+def _get_oracle_path() -> str:
+    return _find_bulk_file("oracle-cards")
+
+
+def _get_unique_artwork_path() -> str:
+    return _find_bulk_file("unique-artwork")
+
+
+# These are now functions - use _get_all_cards_path() and _get_oracle_path() directly
+# Legacy constants removed to avoid stale paths at module load time
 
 SCHEMA_VERSION = 6  # Added card_relationships table
 
@@ -413,7 +438,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 def _load_oracle_map() -> dict[str, dict]:
     oracle: dict[str, dict] = {}
-    for card in _iter_json_gz(ORACLE_GZ):
+    for card in _iter_json_gz(_get_oracle_path()):
         oid = card.get("oracle_id")
         if not oid:
             continue
@@ -561,7 +586,7 @@ def build_db_from_bulk_json(db_path: str = DB_PATH) -> None:
         total_cards = 0
         progress_interval = 10000  # Report progress every 10k cards
 
-        for card in _iter_json_gz(ALL_CARDS_GZ):
+        for card in _iter_json_gz(_get_all_cards_path()):
             cid = card.get("id")
             if not cid:
                 continue
@@ -717,11 +742,11 @@ def build_db_from_bulk_json(db_path: str = DB_PATH) -> None:
         cur.execute("SELECT COUNT(*) FROM prints;")
         count = cur.fetchone()[0]
         try:
-            a_sz = os.path.getsize(ALL_CARDS_GZ) if os.path.exists(ALL_CARDS_GZ) else 0
+            a_sz = os.path.getsize(_get_all_cards_path()) if os.path.exists(_get_all_cards_path()) else 0
         except OSError:
             a_sz = 0
         try:
-            o_sz = os.path.getsize(ORACLE_GZ) if os.path.exists(ORACLE_GZ) else 0
+            o_sz = os.path.getsize(_get_oracle_path()) if os.path.exists(_get_oracle_path()) else 0
         except OSError:
             o_sz = 0
         print("Database build completed successfully!")
@@ -756,10 +781,10 @@ def build_db_from_bulk_json(db_path: str = DB_PATH) -> None:
                     return str(raw[:64]) + " ..."
 
             if total_cards == 0:
-                head = _peek(ALL_CARDS_GZ)
+                head = _peek(_get_all_cards_path())
                 print("[debug] all-cards head sample:\n" + head)
             if oracle_count == 0:
-                head = _peek(ORACLE_GZ)
+                head = _peek(_get_oracle_path())
                 print("[debug] oracle-cards head sample:\n" + head)
     finally:
         conn.close()
@@ -820,8 +845,8 @@ def verify(db_path: str = DB_PATH) -> int:
             except OSError:
                 return 0
 
-        a_sz = _size(ALL_CARDS_GZ)
-        o_sz = _size(ORACLE_GZ)
+        a_sz = _size(_get_all_cards_path())
+        o_sz = _size(_get_oracle_path())
 
         # Report
         print("DB Verify Summary")
@@ -1726,11 +1751,11 @@ def info(db_path: str = DB_PATH) -> None:
         )
         has_fts = bool(cur.fetchone()[0])
         try:
-            a_sz = os.path.getsize(ALL_CARDS_GZ) if os.path.exists(ALL_CARDS_GZ) else 0
+            a_sz = os.path.getsize(_get_all_cards_path()) if os.path.exists(_get_all_cards_path()) else 0
         except OSError:
             a_sz = 0
         try:
-            o_sz = os.path.getsize(ORACLE_GZ) if os.path.exists(ORACLE_GZ) else 0
+            o_sz = os.path.getsize(_get_oracle_path()) if os.path.exists(_get_oracle_path()) else 0
         except OSError:
             o_sz = 0
         print(

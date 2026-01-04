@@ -206,8 +206,13 @@ def main() -> None:
         sys.exit(1)
 
     os.makedirs(BULK_DIR, exist_ok=True)
-    # Derive sensible filename
-    filename = f"{bulk_id}.json.gz"
+    # Derive filename from download URI (preserves actual extension)
+    uri_filename = download_uri.rsplit("/", 1)[-1] if "/" in download_uri else f"{bulk_id}.json"
+    # Normalize to consistent naming: bulk_id.json or bulk_id.json.gz
+    if uri_filename.endswith(".json.gz"):
+        filename = f"{bulk_id}.json.gz"
+    else:
+        filename = f"{bulk_id}.json"
     out_path = os.path.join(BULK_DIR, filename)
 
     try:
