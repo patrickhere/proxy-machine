@@ -17,6 +17,7 @@ from flask import (
     abort,
     jsonify,
     Response,
+    session,
 )
 
 import create_pdf
@@ -31,10 +32,32 @@ except Exception:  # pragma: no cover
         return 0
 
 
-app = Flask(__name__, template_folder='templates')
+app = Flask(__name__, template_folder="templates")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
+
+# Admin authentication
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 TASKS: list[dict] = []
 TASK_LOCK = threading.Lock()
+
+
+def admin_required(f):
+    """Decorator to require admin authentication."""
+    from functools import wraps
+    from flask import session
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not ADMIN_PASSWORD:
+            return render_template_string(
+                "<h1>Admin Disabled</h1><p>Set ADMIN_PASSWORD environment variable to enable admin features.</p>"
+                "<p><a href='/'>Back to Dashboard</a></p>"
+            ), 403
+        if not session.get("admin_authenticated"):
+            return redirect(url_for("admin_login", next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def _resolve_oracle_ids(name: str, set_code: str | None = None) -> list[str]:
@@ -2431,6 +2454,301 @@ def notifications():
             }
         ),
     )
+
+
+# ============================================================
+# ADMIN SECTION
+# ============================================================
+
+ADMIN_LOGIN_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Admin Login</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; }
+        .login-box { background: #f5f5f5; padding: 30px; border-radius: 8px; }
+        h1 { margin-top: 0; }
+        input[type="password"] { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        .error { color: red; margin-bottom: 10px; }
+        a { color: #007bff; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>Admin Login</h1>
+        {% if error %}<p class="error">{{ error }}</p>{% endif %}
+        <form method="post">
+            <input type="password" name="password" placeholder="Admin Password" required autofocus>
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit">Login</button>
+        </form>
+        <p><a href="/">Back to Dashboard</a></p>
+    </div>
+</body>
+</html>
+"""
+
+ADMIN_DASHBOARD_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .section { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .section h2 { margin-top: 0; }
+        .btn { display: inline-block; background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; text-decoration: none; margin: 5px 5px 5px 0; }
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #218838; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+        th { background: #e9ecef; }
+        .status { padding: 3px 8px; border-radius: 3px; font-size: 0.9em; }
+        .status-ok { background: #d4edda; color: #155724; }
+        .status-warn { background: #fff3cd; color: #856404; }
+        .logout { float: right; }
+        .message { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .message-success { background: #d4edda; color: #155724; }
+        .message-error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Admin Dashboard <a href="{{ url_for('admin_logout') }}" class="btn btn-danger logout">Logout</a></h1>
+
+    {% if message %}
+    <div class="message message-{{ message_type or 'success' }}">{{ message }}</div>
+    {% endif %}
+
+    <div class="section">
+        <h2>Database</h2>
+        <table>
+            <tr><th>Metric</th><th>Value</th></tr>
+            <tr><td>Total Prints</td><td>{{ db_info.prints or 0 }}</td></tr>
+            <tr><td>Unique Artworks</td><td>{{ db_info.unique_artworks or 0 }}</td></tr>
+            <tr><td>Schema Version</td><td>{{ db_info.schema_version or 'N/A' }}</td></tr>
+            <tr><td>FTS5 Enabled</td><td><span class="status {{ 'status-ok' if db_info.fts5 else 'status-warn' }}">{{ 'Yes' if db_info.fts5 else 'No' }}</span></td></tr>
+        </table>
+        <form method="post" action="{{ url_for('admin_sync_db') }}" style="display:inline;">
+            <button type="submit" class="btn btn-success">Sync Database</button>
+        </form>
+        <a href="{{ url_for('admin_db_maintenance_protected') }}?allow_download=1" class="btn">Refresh Index (with download)</a>
+    </div>
+
+    <div class="section">
+        <h2>Profiles</h2>
+        <table>
+            <tr><th>Profile</th><th>Decks</th><th>Actions</th></tr>
+            {% for profile in profiles %}
+            <tr>
+                <td>{{ profile.name }}</td>
+                <td>{{ profile.deck_count }}</td>
+                <td>
+                    <a href="{{ url_for('admin_view_profile', name=profile.name) }}" class="btn" style="padding: 5px 10px;">View</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">No profiles found</td></tr>
+            {% endfor %}
+        </table>
+        <h3>Create New Profile</h3>
+        <form method="post" action="{{ url_for('admin_create_profile') }}">
+            <input type="text" name="profile_name" placeholder="Profile name" required>
+            <button type="submit" class="btn btn-success">Create Profile</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>System Info</h2>
+        <table>
+            <tr><th>Setting</th><th>Value</th></tr>
+            <tr><td>Tailscale</td><td><span class="status {{ 'status-ok' if tailscale_enabled else 'status-warn' }}">{{ 'Enabled' if tailscale_enabled else 'Disabled' }}</span></td></tr>
+            <tr><td>Shared Root</td><td>{{ shared_root }}</td></tr>
+            <tr><td>Profiles Root</td><td>{{ profiles_root }}</td></tr>
+            <tr><td>Bulk Data Dir</td><td>{{ bulk_data_dir }}</td></tr>
+        </table>
+    </div>
+
+    <p><a href="/">Back to Dashboard</a></p>
+</body>
+</html>
+"""
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if not ADMIN_PASSWORD:
+        return render_template_string(
+            "<h1>Admin Disabled</h1><p>Set ADMIN_PASSWORD environment variable to enable.</p>"
+            "<p><a href='/'>Back</a></p>"
+        ), 403
+
+    error = None
+    next_url = request.args.get("next", url_for("admin_dashboard"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        next_url = request.form.get("next", url_for("admin_dashboard"))
+        if password == ADMIN_PASSWORD:
+            session["admin_authenticated"] = True
+            return redirect(next_url)
+        else:
+            error = "Invalid password"
+
+    return render_template_string(ADMIN_LOGIN_TEMPLATE, error=error, next_url=next_url)
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin_authenticated", None)
+    return redirect(url_for("index"))
+
+
+@app.route("/admin")
+@admin_required
+def admin_dashboard():
+    message = request.args.get("message")
+    message_type = request.args.get("message_type", "success")
+
+    # Get database info
+    db_info = _bulk_db_info()
+
+    # Get profiles
+    profiles = []
+    profiles_root = os.environ.get("PROFILES_ROOT", os.path.join(create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"))
+    if os.path.isdir(profiles_root):
+        for entry in os.scandir(profiles_root):
+            if entry.is_dir() and not entry.name.startswith("."):
+                deck_count = 0
+                decks_dir = os.path.join(entry.path, "decklist")
+                if os.path.isdir(decks_dir):
+                    deck_count = len([f for f in os.listdir(decks_dir) if f.endswith(".txt")])
+                profiles.append({"name": entry.name, "deck_count": deck_count})
+
+    return render_template_string(
+        ADMIN_DASHBOARD_TEMPLATE,
+        db_info=db_info,
+        profiles=profiles,
+        message=message,
+        message_type=message_type,
+        tailscale_enabled=os.environ.get("TAILSCALE_ENABLED", "").lower() == "true",
+        shared_root=os.environ.get("SHARED_ROOT", "N/A"),
+        profiles_root=os.environ.get("PROFILES_ROOT", "N/A"),
+        bulk_data_dir=os.environ.get("BULK_DATA_DIR", "N/A"),
+    )
+
+
+@app.route("/admin/sync_db", methods=["POST"])
+@admin_required
+def admin_sync_db():
+    try:
+        # Force refresh bulk index with network downloads allowed
+        orig_offline = os.environ.get("PM_OFFLINE")
+        os.environ.pop("PM_OFFLINE", None)
+        try:
+            create_pdf._load_bulk_index(force_refresh=True)
+        finally:
+            if orig_offline is not None:
+                os.environ["PM_OFFLINE"] = orig_offline
+        return redirect(url_for("admin_dashboard", message="Database synced successfully", message_type="success"))
+    except Exception as e:
+        return redirect(url_for("admin_dashboard", message=f"Sync failed: {e}", message_type="error"))
+
+
+@app.route("/admin/create_profile", methods=["POST"])
+@admin_required
+def admin_create_profile():
+    profile_name = request.form.get("profile_name", "").strip()
+    if not profile_name:
+        return redirect(url_for("admin_dashboard", message="Profile name required", message_type="error"))
+
+    # Sanitize profile name
+    safe_name = "".join(c for c in profile_name if c.isalnum() or c in "-_").lower()
+    if not safe_name:
+        return redirect(url_for("admin_dashboard", message="Invalid profile name", message_type="error"))
+
+    profiles_root = os.environ.get("PROFILES_ROOT", os.path.join(create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"))
+    profile_path = os.path.join(profiles_root, safe_name)
+
+    if os.path.exists(profile_path):
+        return redirect(url_for("admin_dashboard", message=f"Profile '{safe_name}' already exists", message_type="error"))
+
+    try:
+        os.makedirs(os.path.join(profile_path, "decklist"), exist_ok=True)
+        os.makedirs(os.path.join(profile_path, "output"), exist_ok=True)
+        return redirect(url_for("admin_dashboard", message=f"Profile '{safe_name}' created", message_type="success"))
+    except Exception as e:
+        return redirect(url_for("admin_dashboard", message=f"Failed to create profile: {e}", message_type="error"))
+
+
+@app.route("/admin/profile/<name>")
+@admin_required
+def admin_view_profile(name):
+    profiles_root = os.environ.get("PROFILES_ROOT", os.path.join(create_pdf.project_root_directory, "magic-the-gathering", "proxied-decks"))
+    profile_path = os.path.join(profiles_root, name)
+
+    if not os.path.isdir(profile_path):
+        return redirect(url_for("admin_dashboard", message=f"Profile '{name}' not found", message_type="error"))
+
+    decks = []
+    decks_dir = os.path.join(profile_path, "decklist")
+    if os.path.isdir(decks_dir):
+        for f in os.listdir(decks_dir):
+            if f.endswith(".txt"):
+                decks.append(f[:-4])
+
+    tmpl = """
+    <!doctype html>
+    <html>
+    <head>
+        <title>Profile: {{ name }}</title>
+        <style>
+            body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+            .btn { display: inline-block; background: #007bff; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; margin: 2px; }
+            ul { list-style: none; padding: 0; }
+            li { padding: 8px; background: #f5f5f5; margin: 5px 0; border-radius: 4px; }
+        </style>
+    </head>
+    <body>
+        <h1>Profile: {{ name }}</h1>
+        <h2>Decks ({{ decks|length }})</h2>
+        <ul>
+        {% for deck in decks %}
+            <li>{{ deck }}</li>
+        {% else %}
+            <li>No decks found</li>
+        {% endfor %}
+        </ul>
+        <p><a href="{{ url_for('admin_dashboard') }}" class="btn">Back to Admin</a></p>
+    </body>
+    </html>
+    """
+    return render_template_string(tmpl, name=name, decks=decks)
+
+
+@app.route("/admin/db_maintenance_protected", methods=["GET"])
+@admin_required
+def admin_db_maintenance_protected():
+    """Protected version of db_maintenance that requires admin auth."""
+    allow_dl = request.args.get("allow_download") in {"1", "true", "yes"}
+    orig_offline = os.environ.get("PM_OFFLINE")
+    try:
+        if not allow_dl:
+            os.environ["PM_OFFLINE"] = "1"
+        _ = create_pdf._load_bulk_index(force_refresh=True)
+    finally:
+        if orig_offline is None:
+            os.environ.pop("PM_OFFLINE", None)
+        else:
+            os.environ["PM_OFFLINE"] = orig_offline
+
+    return redirect(url_for("admin_dashboard", message="Database index refreshed", message_type="success"))
 
 
 if __name__ == "__main__":

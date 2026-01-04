@@ -30,6 +30,8 @@ services:
       - TAILSCALE_ENABLED=true
       - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY}
       - TAILSCALE_HOSTNAME=proxy-machine
+      # Admin authentication (required for /admin access)
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
     volumes:
       - ./data/shared:/data/shared
