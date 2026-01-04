@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import hmac
 import io
 import os
@@ -25,6 +24,7 @@ from flask import (
 # Security imports
 try:
     from flask_wtf.csrf import CSRFProtect
+
     CSRF_AVAILABLE = True
 except ImportError:
     CSRF_AVAILABLE = False
@@ -32,6 +32,7 @@ except ImportError:
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
+
     LIMITER_AVAILABLE = True
 except ImportError:
     LIMITER_AVAILABLE = False
@@ -85,7 +86,9 @@ def _check_login_rate_limit(ip: str) -> tuple[bool, int]:
         if ip not in LOGIN_ATTEMPTS:
             return True, 0
         # Clean old attempts
-        LOGIN_ATTEMPTS[ip] = [t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_LOCKOUT_SECONDS]
+        LOGIN_ATTEMPTS[ip] = [
+            t for t in LOGIN_ATTEMPTS[ip] if now - t < LOGIN_LOCKOUT_SECONDS
+        ]
         if len(LOGIN_ATTEMPTS[ip]) >= MAX_LOGIN_ATTEMPTS:
             oldest = min(LOGIN_ATTEMPTS[ip])
             remaining = int(LOGIN_LOCKOUT_SECONDS - (now - oldest))
@@ -110,6 +113,7 @@ def _clear_login_attempts(ip: str) -> None:
 def _secure_compare(a: str, b: str) -> bool:
     """Timing-safe string comparison to prevent timing attacks."""
     return hmac.compare_digest(a.encode(), b.encode())
+
 
 TASKS: list[dict] = []
 TASK_LOCK = threading.Lock()
@@ -1488,7 +1492,7 @@ def api_generate_pdf(profile):
 
 
 # File upload validation constants
-ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 MAX_FILE_SIZE_MB = 50  # 50MB per file
 MAX_TOTAL_UPLOAD_MB = 500  # 500MB total per request
 
@@ -1501,7 +1505,10 @@ def _validate_upload_file(file) -> tuple[bool, str]:
     # Check extension
     ext = os.path.splitext(file.filename.lower())[1]
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        return False, f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
+        return (
+            False,
+            f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+        )
 
     # Check file size (seek to end and back)
     file.seek(0, 2)  # Seek to end
@@ -1509,7 +1516,10 @@ def _validate_upload_file(file) -> tuple[bool, str]:
     file.seek(0)  # Seek back to start
 
     if size > MAX_FILE_SIZE_MB * 1024 * 1024:
-        return False, f"File too large: {size / 1024 / 1024:.1f}MB (max {MAX_FILE_SIZE_MB}MB)"
+        return (
+            False,
+            f"File too large: {size / 1024 / 1024:.1f}MB (max {MAX_FILE_SIZE_MB}MB)",
+        )
 
     return True, ""
 
@@ -1519,7 +1529,7 @@ def _sanitize_filename(filename: str) -> str:
     # Get just the filename without any path components
     filename = os.path.basename(filename)
     # Remove any null bytes or special characters
-    filename = filename.replace('\x00', '').replace('/', '').replace('\\', '')
+    filename = filename.replace("\x00", "").replace("/", "").replace("\\", "")
     # Limit length
     name, ext = os.path.splitext(filename)
     if len(name) > 200:
@@ -1556,9 +1566,14 @@ def api_upload_images(profile):
             file.seek(0)
 
         if total_size > MAX_TOTAL_UPLOAD_MB * 1024 * 1024:
-            return jsonify({
-                "error": f"Total upload too large: {total_size / 1024 / 1024:.1f}MB (max {MAX_TOTAL_UPLOAD_MB}MB)"
-            }), 400
+            return (
+                jsonify(
+                    {
+                        "error": f"Total upload too large: {total_size / 1024 / 1024:.1f}MB (max {MAX_TOTAL_UPLOAD_MB}MB)"
+                    }
+                ),
+                400,
+            )
 
         # Determine target directory
         if face == "front":
@@ -2535,6 +2550,81 @@ def api_rulings():
     )
 
 
+@app.route("/api/search/cards", methods=["GET"])
+def api_search_cards():
+    """Advanced card search with filters for colors, type, rarity, CMC, and set.
+
+    Query parameters:
+    - q: Search query (name filter)
+    - colors: Mana colors filter (e.g., "WUB" for White, Blue, Black)
+    - type: Card type filter (e.g., "creature", "instant", "sorcery")
+    - rarity: Rarity filter (common, uncommon, rare, mythic)
+    - cmc: Converted mana cost (exact match)
+    - set: Set code filter (e.g., "znr", "mh2")
+    - limit: Maximum results (default 50, max 200)
+    """
+    query = (request.args.get("q") or "").strip()
+    colors_str = (request.args.get("colors") or "").strip().upper()
+    card_type = (request.args.get("type") or "").strip()
+    rarity = (request.args.get("rarity") or "").strip().lower()
+    cmc_str = request.args.get("cmc")
+    set_code = (request.args.get("set") or "").strip().lower() or None
+
+    try:
+        limit = min(int(request.args.get("limit") or "50"), 200)
+    except ValueError:
+        limit = 50
+
+    # Parse colors string into list (e.g., "WUB" -> ["W", "U", "B"])
+    colors_filter = list(colors_str) if colors_str else None
+
+    # Parse CMC
+    cmc_filter = None
+    if cmc_str:
+        try:
+            cmc_filter = float(cmc_str)
+        except ValueError:
+            pass
+
+    try:
+        from db import bulk_index
+
+        results = bulk_index.query_cards(
+            limit=limit,
+            name_filter=query if query else None,
+            type_filter=card_type if card_type else None,
+            rarity_filter=rarity if rarity else None,
+            cmc_filter=cmc_filter,
+            set_filter=set_code,
+            colors_filter=colors_filter,
+            exclude_tokens=True,
+            lang_filter="en",
+        )
+
+        # Format results for frontend
+        cards = []
+        for card in results:
+            cards.append({
+                "id": card.get("id"),
+                "name": card.get("name"),
+                "image_url": card.get("image_url") or "",
+                "rarity": card.get("rarity") or "common",
+                "set": (card.get("set_code") or card.get("set") or "").upper(),
+                "set_name": card.get("set_name") or "",
+                "type_line": card.get("type_line") or "",
+                "mana_cost": card.get("mana_cost") or "",
+                "cmc": card.get("cmc"),
+                "colors": card.get("colors") or [],
+                "oracle_text": card.get("oracle_text") or "",
+            })
+
+        return jsonify({"cards": cards, "count": len(cards)})
+
+    except Exception as e:
+        # Fallback to empty results on error
+        return jsonify({"cards": [], "count": 0, "error": str(e)})
+
+
 NOTIFICATIONS_TEMPLATE = """
 <!doctype html>
 <title>Notification Settings</title>
@@ -2738,8 +2828,15 @@ def admin_login():
     # Check rate limit
     is_allowed, seconds_remaining = _check_login_rate_limit(client_ip)
     if not is_allowed:
-        error = f"Too many login attempts. Please try again in {seconds_remaining} seconds."
-        return render_template_string(ADMIN_LOGIN_TEMPLATE, error=error, next_url=next_url), 429
+        error = (
+            f"Too many login attempts. Please try again in {seconds_remaining} seconds."
+        )
+        return (
+            render_template_string(
+                ADMIN_LOGIN_TEMPLATE, error=error, next_url=next_url
+            ),
+            429,
+        )
 
     if request.method == "POST":
         password = request.form.get("password", "")

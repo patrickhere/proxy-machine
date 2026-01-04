@@ -1,283 +1,409 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div x-data="{
-    selectedProfile: '',
-    selectedDeck: '',
-    showAdvanced: false,
-    message: '',
-    messageType: '',
-    isGenerating: false,
-    showDeckImport: false,
-    deckImportText: '',
+<div x-data="dashboard()" class="space-y-8">
 
-    showMessage(text, type) {
-        this.message = text;
-        this.messageType = type;
-        setTimeout(() => { this.message = ''; }, 5000);
-    }
-}" class="space-y-6">
+    <!-- Hero Section with Search -->
+    <section class="card-frame corner-flourish p-8">
+        <div class="text-center mb-8">
+            <h2 class="font-display text-3xl sm:text-4xl font-semibold text-mana-gold mb-2">Arcane Card Search</h2>
+            <p class="text-arcanum-muted text-lg">Discover cards from across the multiverse</p>
+        </div>
 
-    <!-- Alert Messages -->
-    <div x-show="message" x-cloak
-         :class="messageType === 'success' ? 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200' : 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'"
-         class="rounded-lg border p-4 shadow-sm transition-colors">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <svg x-show="messageType === 'success'" class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-                </svg>
-                <svg x-show="messageType === 'error'" class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                </svg>
-            </div>
-            <div class="ml-3">
-                <p class="text-sm font-medium" x-text="message"></p>
-            </div>
-            <div class="ml-auto pl-3">
-                <button @click="message = ''" class="inline-flex rounded-md p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <span class="sr-only">Dismiss</span>
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+        <!-- Search Input -->
+        <div class="max-w-2xl mx-auto mb-8">
+            <div class="relative">
+                <input type="text"
+                       x-model="searchQuery"
+                       @input.debounce.300ms="performSearch()"
+                       @keydown.enter="performSearch()"
+                       placeholder="Search by card name, oracle text, or type..."
+                       class="w-full px-6 py-4 bg-arcanum-deep border border-arcanum-border rounded-xl text-lg text-arcanum-text placeholder-arcanum-muted focus:border-mana-gold/50 transition-colors">
+                <button @click="performSearch()"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-arcanum-muted hover:text-mana-gold transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
                 </button>
             </div>
         </div>
-    </div>
 
-    <!-- Quick Actions Grid -->
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <!-- Profile & Deck Management -->
-        <div class="lg:col-span-2">
-            <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden transition-colors">
-                <div class="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Profile & Deck Management</h2>
-                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Manage your proxy card collections</p>
+        <!-- Mana Color Filters -->
+        <div class="flex flex-wrap justify-center gap-3 mb-6">
+            <button @click="toggleColor('W')"
+                    :class="colors.includes('W') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-mana-white scale-110' : 'opacity-60 hover:opacity-100'"
+                    class="mana-btn bg-gradient-to-br from-mana-white to-amber-200 text-arcanum-void shadow-lg"
+                    title="White">W</button>
+            <button @click="toggleColor('U')"
+                    :class="colors.includes('U') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-mana-blue scale-110' : 'opacity-60 hover:opacity-100'"
+                    class="mana-btn bg-gradient-to-br from-mana-blue to-blue-400 text-white shadow-lg"
+                    title="Blue">U</button>
+            <button @click="toggleColor('B')"
+                    :class="colors.includes('B') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-purple-500 scale-110' : 'opacity-60 hover:opacity-100'"
+                    class="mana-btn bg-gradient-to-br from-gray-900 to-purple-950 text-gray-300 shadow-lg border border-purple-800"
+                    title="Black">B</button>
+            <button @click="toggleColor('R')"
+                    :class="colors.includes('R') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-mana-red scale-110' : 'opacity-60 hover:opacity-100'"
+                    class="mana-btn bg-gradient-to-br from-mana-red to-orange-500 text-white shadow-lg"
+                    title="Red">R</button>
+            <button @click="toggleColor('G')"
+                    :class="colors.includes('G') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-mana-green scale-110' : 'opacity-60 hover:opacity-100'"
+                    class="mana-btn bg-gradient-to-br from-mana-green to-emerald-400 text-white shadow-lg"
+                    title="Green">G</button>
+            <button @click="toggleColor('C')"
+                    :class="colors.includes('C') ? 'ring-2 ring-offset-2 ring-offset-arcanum-surface ring-mana-colorless scale-110' : 'opacity-60 hover:opacity-100'"
+                    class="mana-btn bg-gradient-to-br from-mana-colorless to-gray-400 text-arcanum-void shadow-lg"
+                    title="Colorless">C</button>
+        </div>
+
+        <!-- Advanced Filters Toggle -->
+        <div class="flex justify-center">
+            <button @click="showFilters = !showFilters"
+                    class="flex items-center gap-2 px-4 py-2 text-sm text-arcanum-muted hover:text-mana-gold transition-colors font-display tracking-wide">
+                <svg :class="showFilters ? 'rotate-180' : ''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+                <span x-text="showFilters ? 'Hide Filters' : 'Advanced Filters'"></span>
+            </button>
+        </div>
+
+        <!-- Advanced Filters Panel -->
+        <div x-show="showFilters" x-cloak x-transition class="mt-6 pt-6 border-t border-arcanum-border">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
+                <!-- Card Type -->
+                <div>
+                    <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">CARD TYPE</label>
+                    <select x-model="cardType" @change="performSearch()"
+                            class="w-full px-3 py-2 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text text-sm">
+                        <option value="">Any Type</option>
+                        <option value="creature">Creature</option>
+                        <option value="instant">Instant</option>
+                        <option value="sorcery">Sorcery</option>
+                        <option value="enchantment">Enchantment</option>
+                        <option value="artifact">Artifact</option>
+                        <option value="planeswalker">Planeswalker</option>
+                        <option value="land">Land</option>
+                    </select>
                 </div>
+
+                <!-- Rarity -->
+                <div>
+                    <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">RARITY</label>
+                    <select x-model="rarity" @change="performSearch()"
+                            class="w-full px-3 py-2 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text text-sm">
+                        <option value="">Any Rarity</option>
+                        <option value="mythic">Mythic Rare</option>
+                        <option value="rare">Rare</option>
+                        <option value="uncommon">Uncommon</option>
+                        <option value="common">Common</option>
+                    </select>
+                </div>
+
+                <!-- CMC -->
+                <div>
+                    <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">MANA VALUE</label>
+                    <select x-model="cmc" @change="performSearch()"
+                            class="w-full px-3 py-2 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text text-sm">
+                        <option value="">Any Cost</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7+">7+</option>
+                    </select>
+                </div>
+
+                <!-- Set -->
+                <div>
+                    <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">SET CODE</label>
+                    <input type="text" x-model="setCode" @input.debounce.300ms="performSearch()"
+                           placeholder="e.g. MH3"
+                           class="w-full px-3 py-2 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text text-sm placeholder-arcanum-muted">
+                </div>
+            </div>
+
+            <!-- Clear Filters -->
+            <div class="flex justify-center mt-4">
+                <button @click="clearFilters()"
+                        class="text-sm text-arcanum-muted hover:text-mana-red transition-colors">
+                    Clear All Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        <div x-show="searchResults.length > 0 || isSearching" class="mt-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-display text-lg text-arcanum-text">
+                    <span x-show="!isSearching" x-text="searchResults.length + ' cards found'"></span>
+                    <span x-show="isSearching" class="text-arcanum-muted">Searching...</span>
+                </h3>
+            </div>
+
+            <!-- Results Grid -->
+            <div x-show="!isSearching" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <template x-for="card in searchResults.slice(0, 20)" :key="card.id">
+                    <div class="group relative bg-arcanum-deep rounded-lg overflow-hidden border border-arcanum-border hover:border-mana-gold/50 transition-all cursor-pointer"
+                         @click="selectCard(card)">
+                        <div class="aspect-[488/680] bg-arcanum-surface">
+                            <img :src="card.image_url || 'https://cards.scryfall.io/normal/front/0/0/00000000-0000-0000-0000-000000000000.jpg'"
+                                 :alt="card.name"
+                                 class="w-full h-full object-cover"
+                                 loading="lazy"
+                                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 488 680%27%3E%3Crect fill=%27%231a1a24%27 width=%27488%27 height=%27680%27/%3E%3Ctext x=%27244%27 y=%27340%27 text-anchor=%27middle%27 fill=%27%236b6b7b%27 font-size=%2724%27%3ENo Image%3C/text%3E%3C/svg%3E'">
+                        </div>
+                        <div class="absolute inset-0 bg-gradient-to-t from-arcanum-void via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div class="absolute bottom-0 left-0 right-0 p-3">
+                                <p class="font-display text-sm text-white truncate" x-text="card.name"></p>
+                                <p class="text-xs text-arcanum-muted" x-text="card.set_name || card.set"></p>
+                            </div>
+                        </div>
+                        <!-- Rarity indicator -->
+                        <div class="absolute top-2 right-2 w-3 h-3 rounded-full"
+                             :class="{
+                                 'bg-orange-500 shadow-[0_0_8px_rgba(255,107,53,0.8)]': card.rarity === 'mythic',
+                                 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]': card.rarity === 'rare',
+                                 'bg-gray-400': card.rarity === 'uncommon',
+                                 'bg-gray-600': card.rarity === 'common'
+                             }"></div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Loading skeleton -->
+            <div x-show="isSearching" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <template x-for="i in 10">
+                    <div class="aspect-[488/680] bg-arcanum-deep rounded-lg shimmer"></div>
+                </template>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Dashboard Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Profile & Deck Management -->
+        <div class="lg:col-span-2 space-y-6">
+            <div class="card-frame">
+                <div class="px-6 py-4 border-b border-arcanum-border flex items-center justify-between">
+                    <div>
+                        <h2 class="font-display text-xl text-mana-gold">Spellbook Management</h2>
+                        <p class="text-sm text-arcanum-muted">Organize your proxy collections</p>
+                    </div>
+                    <button @click="showDeckImport = !showDeckImport"
+                            class="px-4 py-2 text-sm font-display tracking-wide text-arcanum-text bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg transition-colors">
+                        <span x-text="showDeckImport ? 'Cancel' : 'Import Deck'"></span>
+                    </button>
+                </div>
+
                 <div class="p-6 space-y-6">
                     <!-- Profile Selection -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Profile</label>
-                        <select id="profileSelect" x-model="selectedProfile"
-                                @change="loadDecks()"
-                                class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-purple-500 focus:ring-purple-500 text-base">
-                            <option value="">Loading profiles...</option>
+                        <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">SELECT PROFILE</label>
+                        <select id="profileSelect" x-model="selectedProfile" @change="loadDecks()"
+                                class="w-full px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
+                            <option value="">Choose a profile...</option>
                         </select>
                     </div>
 
-                    <!-- Deck List with Actions -->
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Decks</label>
-                            <button @click="showDeckImport = !showDeckImport"
-                                    class="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300">
-                                <span x-text="showDeckImport ? 'Cancel Import' : 'Import Deck List'"></span>
+                    <!-- Deck Import Panel -->
+                    <div x-show="showDeckImport" x-cloak x-transition class="p-4 bg-arcanum-deep/50 rounded-lg border border-mana-gold/20">
+                        <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">PASTE DECK LIST</label>
+                        <textarea x-model="deckImportText" rows="6" placeholder="4 Lightning Bolt&#10;4 Counterspell&#10;2 Island&#10;..."
+                                  class="w-full px-4 py-3 bg-arcanum-void border border-arcanum-border rounded-lg text-arcanum-text placeholder-arcanum-muted text-sm"></textarea>
+                        <div class="mt-3 flex gap-3">
+                            <input type="text" id="importDeckName" placeholder="Deck name..."
+                                   class="flex-1 px-4 py-2 bg-arcanum-void border border-arcanum-border rounded-lg text-arcanum-text text-sm">
+                            <button @click="importDeck()"
+                                    class="px-6 py-2 bg-gradient-to-r from-mana-gold to-amber-600 text-arcanum-void font-display text-sm tracking-wide rounded-lg btn-lift">
+                                Import
                             </button>
-                        </div>
-
-                        <!-- Deck Import Panel -->
-                        <div x-show="showDeckImport" x-cloak x-transition class="mb-4 p-4 bg-purple-50 dark:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-800">
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Paste deck list (MTGA format supported)</label>
-                            <textarea x-model="deckImportText" rows="6" placeholder="4 Lightning Bolt&#10;4 Counterspell&#10;2 Island&#10;..."
-                                      class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-purple-500 focus:ring-purple-500 text-sm"></textarea>
-                            <div class="mt-3 flex gap-2">
-                                <input type="text" id="importDeckName" placeholder="Deck name..."
-                                       class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-purple-500 focus:ring-purple-500 text-sm">
-                                <button @click="importDeck()"
-                                        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium">
-                                    Import & Fetch Cards
-                                </button>
-                            </div>
-                        </div>
-
-                        <div id="deckList"
-                             class="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900/50 min-h-[200px] transition-colors">
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Select a profile to view decks</p>
                         </div>
                     </div>
 
-                    <!-- Create New Deck -->
+                    <!-- Deck List -->
+                    <div>
+                        <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">DECK COLLECTION</label>
+                        <div id="deckList" class="min-h-[200px] bg-arcanum-deep/30 rounded-lg border border-arcanum-border p-4">
+                            <p class="text-sm text-arcanum-muted text-center py-8">Select a profile to view decks</p>
+                        </div>
+                    </div>
+
+                    <!-- Create Deck -->
                     <div class="flex gap-3">
                         <input type="text" id="newDeckName" placeholder="New deck name..."
-                               class="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                               class="flex-1 px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
                         <button @click="createDeck()"
-                                class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors font-medium">
+                                class="px-6 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border text-arcanum-text font-display tracking-wide rounded-lg transition-colors">
                             Create Deck
                         </button>
                     </div>
                 </div>
             </div>
+
+            <!-- PDF Generation -->
+            <div class="card-frame">
+                <div class="px-6 py-4 border-b border-arcanum-border">
+                    <h2 class="font-display text-xl text-mana-gold">Forge Proxies</h2>
+                    <p class="text-sm text-arcanum-muted">Generate print-ready PDF sheets</p>
+                </div>
+
+                <div class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">DECK</label>
+                            <select id="deckSelect" x-model="selectedDeck"
+                                    class="w-full px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
+                                <option value="">All cards</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-display text-arcanum-muted mb-2 tracking-wide">OUTPUT NAME</label>
+                            <input type="text" id="pdfName" placeholder="Auto-generated"
+                                   class="w-full px-4 py-3 bg-arcanum-deep border border-arcanum-border rounded-lg text-arcanum-text">
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <details class="group">
+                        <summary class="cursor-pointer text-sm text-arcanum-muted hover:text-mana-gold transition-colors font-display tracking-wide list-none flex items-center gap-2">
+                            <svg class="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                            Advanced Options
+                        </summary>
+                        <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-arcanum-deep/30 rounded-lg">
+                            <div>
+                                <label class="block text-xs text-arcanum-muted mb-1">Card Size</label>
+                                <select id="cardSize" class="w-full px-3 py-2 bg-arcanum-void border border-arcanum-border rounded text-sm text-arcanum-text">
+                                    <option value="standard">Standard</option>
+                                    <option value="poker">Poker</option>
+                                    <option value="bridge">Bridge</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-arcanum-muted mb-1">Paper</label>
+                                <select id="paperSize" class="w-full px-3 py-2 bg-arcanum-void border border-arcanum-border rounded text-sm text-arcanum-text">
+                                    <option value="letter">Letter</option>
+                                    <option value="a4">A4</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-arcanum-muted mb-1">PPI</label>
+                                <input type="number" id="ppi" value="600"
+                                       class="w-full px-3 py-2 bg-arcanum-void border border-arcanum-border rounded text-sm text-arcanum-text">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-arcanum-muted mb-1">Crop (mm)</label>
+                                <input type="number" id="crop" value="3" step="0.5"
+                                       class="w-full px-3 py-2 bg-arcanum-void border border-arcanum-border rounded text-sm text-arcanum-text">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-arcanum-muted mb-1">Quality</label>
+                                <input type="number" id="quality" value="100" min="50" max="100"
+                                       class="w-full px-3 py-2 bg-arcanum-void border border-arcanum-border rounded text-sm text-arcanum-text">
+                            </div>
+                            <div class="flex items-end">
+                                <label class="flex items-center gap-2 text-sm text-arcanum-text">
+                                    <input type="checkbox" id="onlyFronts" class="rounded border-arcanum-border bg-arcanum-void text-mana-gold">
+                                    Fronts only
+                                </label>
+                            </div>
+                        </div>
+                    </details>
+
+                    <button @click="generatePDF()" :disabled="isGenerating"
+                            :class="isGenerating ? 'opacity-50' : ''"
+                            class="w-full py-4 bg-gradient-to-r from-mana-gold via-amber-500 to-mana-gold text-arcanum-void font-display text-lg tracking-wide rounded-lg btn-lift flex items-center justify-center gap-3">
+                        <svg x-show="isGenerating" class="w-5 h-5 spinner" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        <span x-text="isGenerating ? 'Forging...' : 'Generate PDF'"></span>
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <!-- Quick Stats -->
+        <!-- Sidebar -->
         <div class="space-y-6">
-            <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6 transition-colors">
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">System Status</h3>
-                <div class="mt-4 space-y-4">
+            <!-- System Status -->
+            <div class="card-frame p-6">
+                <h3 class="font-display text-sm text-arcanum-muted tracking-widest uppercase mb-4">System Status</h3>
+                <div class="space-y-3">
                     <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-600 dark:text-gray-300">Database</span>
-                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/50 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-300">
-                            Ready
+                        <span class="text-arcanum-text">Database</span>
+                        <span class="flex items-center gap-2 text-sm">
+                            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                            <span class="text-green-400">Ready</span>
                         </span>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-600 dark:text-gray-300">Scryfall API</span>
-                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/50 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-300">
-                            Connected
+                        <span class="text-arcanum-text">Scryfall API</span>
+                        <span class="flex items-center gap-2 text-sm">
+                            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                            <span class="text-green-400">Connected</span>
                         </span>
                     </div>
                 </div>
             </div>
 
-            <!-- Background Tasks -->
-            <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6 transition-colors">
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Recent Tasks</h3>
+            <!-- Recent Tasks -->
+            <div class="card-frame p-6">
+                <h3 class="font-display text-sm text-arcanum-muted tracking-widest uppercase mb-4">Recent Tasks</h3>
                 <div class="space-y-3" id="taskList">
                     {% for task in tasks[-5:] %}
                     <div class="flex items-center justify-between text-sm">
-                        <span class="text-gray-600 dark:text-gray-300 truncate">{{ task.name }}</span>
-                        <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium
-                                   {% if task.status == 'completed' %}bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300{% elif task.status == 'running' %}bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300{% else %}bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300{% endif %}">
+                        <span class="text-arcanum-text truncate">{{ task.name }}</span>
+                        <span class="px-2 py-1 rounded text-xs font-display tracking-wide
+                                   {% if task.status == 'completed' %}bg-green-900/30 text-green-400{% elif task.status == 'running' %}bg-blue-900/30 text-blue-400{% else %}bg-red-900/30 text-red-400{% endif %}">
                             {{ task.status }}
                         </span>
                     </div>
                     {% else %}
-                    <p class="text-sm text-gray-500 dark:text-gray-400">No recent tasks</p>
+                    <p class="text-sm text-arcanum-muted text-center py-4">No recent tasks</p>
                     {% endfor %}
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- PDF Generation -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden transition-colors">
-        <div class="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Generate PDF</h2>
-            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Create print-ready proxy PDFs</p>
-        </div>
-        <div class="p-6 space-y-6">
-            <!-- Basic Options -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Deck (Optional)</label>
-                    <select id="deckSelect" x-model="selectedDeck"
-                            class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">All cards (no deck filter)</option>
-                    </select>
+            <!-- Quick Actions -->
+            <div class="card-frame p-6">
+                <h3 class="font-display text-sm text-arcanum-muted tracking-widest uppercase mb-4">Quick Actions</h3>
+                <div class="space-y-2">
+                    <a href="/coverage" class="block w-full px-4 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg text-center text-arcanum-text font-display text-sm tracking-wide transition-colors">
+                        Coverage Reports
+                    </a>
+                    <a href="/unique_art" class="block w-full px-4 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg text-center text-arcanum-text font-display text-sm tracking-wide transition-colors">
+                        Unique Artwork
+                    </a>
+                    <a href="/admin" class="block w-full px-4 py-3 bg-arcanum-surface hover:bg-arcanum-elevated border border-arcanum-border rounded-lg text-center text-arcanum-text font-display text-sm tracking-wide transition-colors">
+                        Admin Panel
+                    </a>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">PDF Name (Optional)</label>
-                    <input type="text" id="pdfName" placeholder="Auto-generated if empty"
-                           class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                </div>
-            </div>
-
-            <!-- Advanced Options Toggle -->
-            <div>
-                <button @click="showAdvanced = !showAdvanced"
-                        class="flex items-center text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">
-                    <svg :class="showAdvanced ? 'rotate-90' : ''" class="mr-2 h-4 w-4 transform transition-transform" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                    </svg>
-                    <span x-text="showAdvanced ? 'Hide' : 'Show'"></span> Advanced Options
-                </button>
-            </div>
-
-            <!-- Advanced Options -->
-            <div x-show="showAdvanced" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Card Size</label>
-                    <select id="cardSize" class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                        <option value="standard">Standard (2.5" x 3.5")</option>
-                        <option value="poker">Poker</option>
-                        <option value="bridge">Bridge</option>
-                        <option value="tarot">Tarot</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Paper Size</label>
-                    <select id="paperSize" class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                        <option value="letter">Letter (8.5" x 11")</option>
-                        <option value="a4">A4</option>
-                        <option value="tabloid">Tabloid</option>
-                        <option value="a3">A3</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Crop (mm)</label>
-                    <input type="number" id="crop" value="3.0" step="0.5" min="0" max="10"
-                           class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">PPI (Quality)</label>
-                    <input type="number" id="ppi" value="600" step="100" min="300" max="1200"
-                           class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">JPEG Quality</label>
-                    <input type="number" id="quality" value="100" min="50" max="100"
-                           class="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
-                </div>
-                <div class="flex items-end">
-                    <label class="flex items-center">
-                        <input type="checkbox" id="onlyFronts"
-                               class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500">
-                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Only fronts (no backs)</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Generate Button with Loading State -->
-            <div class="flex justify-end">
-                <button @click="generatePDF()" :disabled="isGenerating"
-                        :class="isGenerating ? 'opacity-50 cursor-not-allowed' : ''"
-                        class="px-8 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all font-semibold shadow-lg flex items-center gap-2">
-                    <svg x-show="isGenerating" class="spinner h-5 w-5" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span x-text="isGenerating ? 'Generating...' : 'Generate PDF'"></span>
-                </button>
             </div>
         </div>
     </div>
 
-    <!-- Admin Tools -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Database Sync -->
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6 transition-colors">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Database Management</h3>
-            <div class="space-y-3">
-                <form method="POST" action="/run">
-                    <input type="hidden" name="action" value="fetch_basics">
-                    <button type="submit"
-                            class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium text-left">
-                        Sync Basic Lands
-                    </button>
-                </form>
-                <form method="POST" action="/run">
-                    <input type="hidden" name="action" value="fetch_nonbasics">
-                    <button type="submit"
-                            class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium text-left">
-                        Sync Non-Basic Lands
-                    </button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Tools -->
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6 transition-colors">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Tools</h3>
-            <div class="space-y-3">
-                <a href="/coverage"
-                   class="block w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium text-center">
-                    View Coverage Reports
-                </a>
-                <a href="/unique_art"
-                   class="block w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium text-center">
-                    Unique Artwork Explorer
-                </a>
-            </div>
+    <!-- Toast Notifications -->
+    <div x-show="message" x-cloak x-transition
+         class="fixed bottom-6 right-6 z-50 max-w-sm">
+        <div :class="messageType === 'success' ? 'border-green-500/50 bg-green-900/20' : 'border-red-500/50 bg-red-900/20'"
+             class="card-frame border-l-4 p-4 flex items-start gap-3">
+            <svg x-show="messageType === 'success'" class="w-5 h-5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            <svg x-show="messageType === 'error'" class="w-5 h-5 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+            </svg>
+            <p class="text-sm text-arcanum-text" x-text="message"></p>
+            <button @click="message = ''" class="ml-auto text-arcanum-muted hover:text-arcanum-text">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </button>
         </div>
     </div>
 </div>
@@ -285,205 +411,260 @@
 
 {% block extra_scripts %}
 <script>
-function loadProfiles() {
-    fetch('/api/profiles')
-        .then(r => r.json())
-        .then(data => {
-            const select = document.getElementById('profileSelect');
-            select.innerHTML = '<option value="">Select profile...</option>';
-            data.profiles.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.name;
-                opt.textContent = p.name;
-                select.appendChild(opt);
-            });
-        });
-}
+function dashboard() {
+    return {
+        // State
+        selectedProfile: '',
+        selectedDeck: '',
+        message: '',
+        messageType: '',
+        isGenerating: false,
+        showDeckImport: false,
+        deckImportText: '',
 
-function loadDecks() {
-    const profile = document.getElementById('profileSelect').value;
-    const list = document.getElementById('deckList');
+        // Search state
+        searchQuery: '',
+        colors: [],
+        cardType: '',
+        rarity: '',
+        cmc: '',
+        setCode: '',
+        showFilters: false,
+        searchResults: [],
+        isSearching: false,
 
-    if (!profile) {
-        list.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400">Select a profile to view decks</p>';
-        return;
-    }
+        // Methods
+        showMessage(text, type) {
+            this.message = text;
+            this.messageType = type;
+            setTimeout(() => { this.message = ''; }, 5000);
+        },
 
-    list.innerHTML = '<div class="flex items-center justify-center py-4"><svg class="spinner h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>';
-
-    fetch(`/api/profiles/${profile}/decks`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.decks.length === 0) {
-                list.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400">No decks found. Create one above!</p>';
+        toggleColor(color) {
+            const idx = this.colors.indexOf(color);
+            if (idx > -1) {
+                this.colors.splice(idx, 1);
             } else {
-                let html = '<div class="space-y-2">';
-                data.decks.forEach(deck => {
-                    html += `
-                        <div class="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 transition-colors group">
-                            <div class="flex-1 min-w-0">
-                                <span class="font-medium text-gray-900 dark:text-white">${deck.name}</span>
-                                <span class="ml-2 text-sm text-gray-500 dark:text-gray-400">${deck.card_count} cards</span>
-                            </div>
-                            <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onclick="viewDeck('${deck.name}')" class="p-1 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400" title="View deck">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                    </svg>
-                                </button>
-                                <button onclick="deleteDeck('${deck.name}')" class="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400" title="Delete deck">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                list.innerHTML = html;
+                this.colors.push(color);
+            }
+            this.performSearch();
+        },
+
+        clearFilters() {
+            this.colors = [];
+            this.cardType = '';
+            this.rarity = '';
+            this.cmc = '';
+            this.setCode = '';
+            this.searchResults = [];
+        },
+
+        async performSearch() {
+            if (!this.searchQuery && this.colors.length === 0 && !this.cardType && !this.rarity && !this.cmc && !this.setCode) {
+                this.searchResults = [];
+                return;
             }
 
-            // Update deck select
-            const deckSelect = document.getElementById('deckSelect');
-            deckSelect.innerHTML = '<option value="">All cards (no deck filter)</option>';
-            data.decks.forEach(deck => {
-                deckSelect.innerHTML += `<option value="${deck.name}">${deck.name} (${deck.card_count} cards)</option>`;
-            });
-        });
-}
+            this.isSearching = true;
 
-function createDeck() {
-    const profile = document.getElementById('profileSelect').value;
-    const deckName = document.getElementById('newDeckName').value.trim();
+            const params = new URLSearchParams();
+            if (this.searchQuery) params.set('q', this.searchQuery);
+            if (this.colors.length) params.set('colors', this.colors.join(''));
+            if (this.cardType) params.set('type', this.cardType);
+            if (this.rarity) params.set('rarity', this.rarity);
+            if (this.cmc) params.set('cmc', this.cmc);
+            if (this.setCode) params.set('set', this.setCode);
 
-    if (!profile || !deckName) {
-        showGlobalMessage('Please select a profile and enter a deck name', 'error');
-        return;
-    }
+            try {
+                const res = await fetch(`/api/search/cards?${params}`);
+                const data = await res.json();
+                this.searchResults = data.cards || [];
+            } catch (e) {
+                this.showMessage('Search failed', 'error');
+                this.searchResults = [];
+            } finally {
+                this.isSearching = false;
+            }
+        },
 
-    fetch(`/api/profiles/${profile}/decks`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({deck_name: deckName})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showGlobalMessage(data.error, 'error');
-        } else {
-            showGlobalMessage(`Deck "${deckName}" created!`, 'success');
-            document.getElementById('newDeckName').value = '';
-            loadDecks();
+        selectCard(card) {
+            // TODO: Open card detail modal or add to deck
+            this.showMessage(`Selected: ${card.name}`, 'success');
+        },
+
+        init() {
+            this.loadProfiles();
+        },
+
+        async loadProfiles() {
+            try {
+                const res = await fetch('/api/profiles');
+                const data = await res.json();
+                const select = document.getElementById('profileSelect');
+                select.innerHTML = '<option value="">Choose a profile...</option>';
+                (data.profiles || []).forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                console.error('Failed to load profiles:', e);
+            }
+        },
+
+        async loadDecks() {
+            const profile = this.selectedProfile;
+            const list = document.getElementById('deckList');
+
+            if (!profile) {
+                list.innerHTML = '<p class="text-sm text-arcanum-muted text-center py-8">Select a profile to view decks</p>';
+                return;
+            }
+
+            list.innerHTML = '<div class="flex justify-center py-8"><div class="w-8 h-8 border-2 border-mana-gold/30 border-t-mana-gold rounded-full spinner"></div></div>';
+
+            try {
+                const res = await fetch(`/api/profiles/${profile}/decks`);
+                const data = await res.json();
+
+                if (!data.decks || data.decks.length === 0) {
+                    list.innerHTML = '<p class="text-sm text-arcanum-muted text-center py-8">No decks found. Create one below!</p>';
+                } else {
+                    let html = '<div class="space-y-2">';
+                    data.decks.forEach(deck => {
+                        html += `
+                            <div class="flex items-center justify-between p-3 bg-arcanum-surface rounded-lg border border-arcanum-border hover:border-mana-gold/30 transition-colors group">
+                                <div>
+                                    <span class="font-display text-arcanum-text">${deck.name}</span>
+                                    <span class="text-sm text-arcanum-muted ml-2">${deck.card_count} cards</span>
+                                </div>
+                                <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onclick="viewDeck('${deck.name}')" class="p-1 text-arcanum-muted hover:text-mana-gold">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    list.innerHTML = html;
+                }
+
+                // Update deck select
+                const deckSelect = document.getElementById('deckSelect');
+                deckSelect.innerHTML = '<option value="">All cards</option>';
+                (data.decks || []).forEach(deck => {
+                    deckSelect.innerHTML += `<option value="${deck.name}">${deck.name} (${deck.card_count})</option>`;
+                });
+            } catch (e) {
+                list.innerHTML = '<p class="text-sm text-red-400 text-center py-8">Failed to load decks</p>';
+            }
+        },
+
+        async createDeck() {
+            const deckName = document.getElementById('newDeckName').value.trim();
+            if (!this.selectedProfile || !deckName) {
+                this.showMessage('Select a profile and enter a deck name', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/profiles/${this.selectedProfile}/decks`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({deck_name: deckName})
+                });
+                const data = await res.json();
+                if (data.error) {
+                    this.showMessage(data.error, 'error');
+                } else {
+                    this.showMessage(`Deck "${deckName}" created!`, 'success');
+                    document.getElementById('newDeckName').value = '';
+                    this.loadDecks();
+                }
+            } catch (e) {
+                this.showMessage('Failed to create deck', 'error');
+            }
+        },
+
+        async importDeck() {
+            const deckName = document.getElementById('importDeckName').value.trim();
+            if (!this.selectedProfile || !deckName || !this.deckImportText) {
+                this.showMessage('Fill in all fields', 'error');
+                return;
+            }
+
+            this.showMessage('Importing deck...', 'success');
+
+            try {
+                const res = await fetch(`/api/profiles/${this.selectedProfile}/import-deck`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({deck_name: deckName, deck_list: this.deckImportText})
+                });
+                const data = await res.json();
+                if (data.error) {
+                    this.showMessage(data.error, 'error');
+                } else {
+                    this.showMessage(`Imported "${deckName}"!`, 'success');
+                    this.deckImportText = '';
+                    document.getElementById('importDeckName').value = '';
+                    this.showDeckImport = false;
+                    this.loadDecks();
+                }
+            } catch (e) {
+                this.showMessage('Import failed', 'error');
+            }
+        },
+
+        async generatePDF() {
+            if (!this.selectedProfile) {
+                this.showMessage('Select a profile first', 'error');
+                return;
+            }
+
+            this.isGenerating = true;
+
+            const payload = {
+                deck: document.getElementById('deckSelect').value || null,
+                pdf_name: document.getElementById('pdfName').value.trim() || null,
+                card_size: document.getElementById('cardSize').value,
+                paper_size: document.getElementById('paperSize').value,
+                crop: parseFloat(document.getElementById('crop').value),
+                ppi: parseInt(document.getElementById('ppi').value),
+                quality: parseInt(document.getElementById('quality').value),
+                only_fronts: document.getElementById('onlyFronts').checked
+            };
+
+            try {
+                const res = await fetch(`/api/profiles/${this.selectedProfile}/pdf`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.error) {
+                    this.showMessage(data.error, 'error');
+                } else {
+                    this.showMessage('PDF generation started!', 'success');
+                    setTimeout(() => location.reload(), 3000);
+                }
+            } catch (e) {
+                this.showMessage('Failed to start generation', 'error');
+            } finally {
+                this.isGenerating = false;
+            }
         }
-    });
-}
-
-function importDeck() {
-    const profile = document.getElementById('profileSelect').value;
-    const deckName = document.getElementById('importDeckName').value.trim();
-    const deckList = Alpine.$data(document.querySelector('[x-data]')).deckImportText.trim();
-
-    if (!profile) {
-        showGlobalMessage('Please select a profile first', 'error');
-        return;
-    }
-    if (!deckName) {
-        showGlobalMessage('Please enter a deck name', 'error');
-        return;
-    }
-    if (!deckList) {
-        showGlobalMessage('Please paste a deck list', 'error');
-        return;
-    }
-
-    showGlobalMessage('Importing deck and fetching cards...', 'success');
-
-    fetch(`/api/profiles/${profile}/import-deck`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({deck_name: deckName, deck_list: deckList})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showGlobalMessage(data.error, 'error');
-        } else {
-            showGlobalMessage(`Deck "${deckName}" imported! ${data.cards_found || 0} cards found.`, 'success');
-            document.getElementById('importDeckName').value = '';
-            Alpine.$data(document.querySelector('[x-data]')).deckImportText = '';
-            Alpine.$data(document.querySelector('[x-data]')).showDeckImport = false;
-            loadDecks();
-        }
-    });
-}
-
-function viewDeck(deckName) {
-    // TODO: Implement deck viewer modal
-    showGlobalMessage(`Viewing deck: ${deckName}`, 'success');
-}
-
-function deleteDeck(deckName) {
-    if (!confirm(`Delete deck "${deckName}"? This cannot be undone.`)) return;
-
-    const profile = document.getElementById('profileSelect').value;
-    // TODO: Implement deck deletion API
-    showGlobalMessage(`Delete not yet implemented for: ${deckName}`, 'error');
-}
-
-function generatePDF() {
-    const profile = document.getElementById('profileSelect').value;
-    if (!profile) {
-        showGlobalMessage('Please select a profile first', 'error');
-        return;
-    }
-
-    const alpine = Alpine.$data(document.querySelector('[x-data]'));
-    alpine.isGenerating = true;
-
-    const payload = {
-        deck: document.getElementById('deckSelect').value || null,
-        pdf_name: document.getElementById('pdfName').value.trim() || null,
-        card_size: document.getElementById('cardSize').value,
-        paper_size: document.getElementById('paperSize').value,
-        crop: parseFloat(document.getElementById('crop').value),
-        ppi: parseInt(document.getElementById('ppi').value),
-        quality: parseInt(document.getElementById('quality').value),
-        only_fronts: document.getElementById('onlyFronts').checked
     };
-
-    fetch(`/api/profiles/${profile}/pdf`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-    })
-    .then(r => r.json())
-    .then(data => {
-        alpine.isGenerating = false;
-        if (data.error) {
-            showGlobalMessage(data.error, 'error');
-        } else {
-            showGlobalMessage('PDF generation started! Check tasks below.', 'success');
-            setTimeout(() => location.reload(), 3000);
-        }
-    })
-    .catch(err => {
-        alpine.isGenerating = false;
-        showGlobalMessage('Failed to start PDF generation', 'error');
-    });
 }
 
-function showGlobalMessage(text, type) {
-    const alpine = Alpine.$data(document.querySelector('[x-data]'));
-    if (alpine) {
-        alpine.showMessage(text, type);
-    }
+function viewDeck(name) {
+    // TODO: implement deck viewer
+    alert('View deck: ' + name);
 }
-
-// Load profiles on page load
-document.addEventListener('DOMContentLoaded', () => {
-    loadProfiles();
-});
 </script>
 {% endblock %}
