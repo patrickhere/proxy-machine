@@ -14,6 +14,9 @@ services:
     ports:
       - "0.0.0.0:5001:5001"
 
+    env_file:
+      - .env
+
     environment:
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5001
@@ -27,11 +30,6 @@ services:
       - BULK_DATA_DIR=/data/bulk-data
       - REPORTS_DIR=/data/shared/reports
       - PDF_OUTPUT_DIR=/data/pdfs
-      - TAILSCALE_ENABLED=true
-      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY}
-      - TAILSCALE_HOSTNAME=proxy-machine
-      # Admin authentication (required for /admin access)
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
     volumes:
       - ./data/shared:/data/shared
