@@ -29,8 +29,11 @@ services:
       - PDF_OUTPUT_DIR=/data/pdfs
       - TAILSCALE_ENABLED=true
       - TAILSCALE_HOSTNAME=proxy-machine
-      - TAILSCALE_AUTHKEY=YOUR_TAILSCALE_KEY_HERE
-      - ADMIN_PASSWORD=YOUR_PASSWORD_HERE
+      # IMPORTANT: Set these values before deploying!
+      # Get your Tailscale auth key from: https://login.tailscale.com/admin/settings/keys
+      - TAILSCALE_AUTHKEY=
+      # Set a strong password for admin dashboard access
+      - ADMIN_PASSWORD=
 
     volumes:
       - ./data/shared:/data/shared
