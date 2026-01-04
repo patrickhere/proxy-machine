@@ -1,0 +1,75 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+—python/
+*.virtualenv/
+
+# IDEs/Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archives and backups (generated)
+archived/
+
+# Generated data directory
+data/
+
+# Database files (anywhere)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+config/notifications.json
+
+# Logs
+*.log
+logs/
+
+# Generated files
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+!assets/**
+!examples/**
+!cutting_templates/**
+
+# But exclude large PDFs even in examples
+assets/calibration/*.pdf
+assets/game/output/*.pdf
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS files
+Thumbs.db
+Desktop.ini

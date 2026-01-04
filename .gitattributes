@@ -1,0 +1,63 @@
+# Git attributes for The Proxy Machine
+
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Python files
+*.py text eol=lf diff=python
+*.pyi text eol=lf diff=python
+
+# Shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows scripts
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# Config files
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Makefiles
+Makefile text eol=lf
+*.mk text eol=lf
+
+# Images (binary)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+
+# PDFs (binary)
+*.pdf binary
+
+# Archives (binary)
+*.gz binary
+*.zip binary
+*.tar binary
+*.tgz binary
+
+# Database files (binary)
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Diff settings
+*.ipynb diff=jupyternotebook
+*.pdf diff=pdf
+*.png diff=image
+*.jpg diff=image

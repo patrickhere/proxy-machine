@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "macos": {
+    "enabled": true
+  },
+  "webhook": {
+    "enabled": false,
+    "url": ""
+  }
+}

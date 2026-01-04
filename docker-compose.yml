@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  proxy-machine:
+    build: .
+    container_name: proxy-machine
+    ports:
+      - "5001:5001"
+    volumes:
+      # Persistent data volumes
+      - ./data/shared:/data/shared
+      - ./data/profiles:/data/profiles
+      - ./data/bulk-data:/data/bulk-data
+
+      # Optional: Mount local code for development
+      # - .:/app
+    environment:
+      # Path configuration
+      - PROXY_MACHINE_ROOT=/app
+      - SHARED_ROOT=/data/shared
+      - PROFILES_ROOT=/data/profiles
+      - BULK_DATA_DIR=/data/bulk-data
+      - DATABASE_PATH=/data/bulk-data/bulk-index.db
+
+      # Web server
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=5001
+
+      # Optional: Tailscale (future feature)
+      # - TAILSCALE_ENABLED=true
+      # - TAILSCALE_HOSTNAME=proxy-machine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+# For Unraid deployment, use these volume mappings instead:
+# volumes:
+#   - /mnt/user/appdata/proxy-machine/shared:/data/shared
+#   - /mnt/user/appdata/proxy-machine/profiles:/data/profiles
+#   - /mnt/user/appdata/proxy-machine/bulk-data:/data/bulk-data

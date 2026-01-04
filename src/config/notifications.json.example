@@ -1,0 +1,9 @@
+{
+  "macos_notifications": {
+    "enabled": true
+  },
+  "webhook": {
+    "enabled": false,
+    "url": ""
+  }
+}

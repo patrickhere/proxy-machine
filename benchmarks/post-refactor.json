@@ -1,0 +1,56 @@
+{
+  "timestamp": "2025-10-16 20:20:31",
+  "system": {
+    "python_version": "3.11.13",
+    "platform": "darwin"
+  },
+  "benchmarks": [
+    {
+      "name": "deck_import",
+      "description": "Parse 60-card MTGA format deck",
+      "duration_seconds": 0.000244140625,
+      "memory_peak_bytes": 7221,
+      "success": true,
+      "error": null
+    },
+    {
+      "name": "token_expansion",
+      "description": "Resolve token relationships for 20 cards",
+      "duration_seconds": 0.01659679412841797,
+      "memory_peak_bytes": 643785,
+      "success": true,
+      "error": null
+    },
+    {
+      "name": "pdf_generation",
+      "description": "Calculate layout for 9-card PDF",
+      "duration_seconds": 1.2636184692382812e-05,
+      "memory_peak_bytes": 456,
+      "success": true,
+      "error": null
+    },
+    {
+      "name": "image_fetch",
+      "description": "Simulate fetching 10 card images",
+      "duration_seconds": 0.0043408870697021484,
+      "memory_peak_bytes": 41645,
+      "success": true,
+      "error": null
+    },
+    {
+      "name": "memory_usage",
+      "description": "Query 100 cards and measure memory",
+      "duration_seconds": 0.03084707260131836,
+      "memory_peak_bytes": 420937,
+      "success": true,
+      "error": null
+    }
+  ],
+  "summary": {
+    "total_duration_seconds": 0.05204153060913086,
+    "peak_memory_bytes": 643785,
+    "benchmarks_run": 5,
+    "benchmarks_passed": 5,
+    "benchmarks_failed": 0
+  }
+}

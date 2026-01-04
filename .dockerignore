@@ -1,0 +1,66 @@
+# Don't copy these into the Docker image
+
+# Data directories (will be mounted as volumes)
+bulk-data/
+data/
+../magic-the-gathering/
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Documentation (optional - include if you want docs in container)
+# docs/
+# mds/
+
+# Environment files (secrets)
+.env
+.env.local
+
+# Test files
+tests/
+test_*.py
+
+# Temporary files
+tmp/
+temp/
+*.tmp

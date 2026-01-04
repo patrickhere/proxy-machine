@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Proxy Machine: pre-push hook
+# Creates a git bundle backup and an optional snapshot zip.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BACKUP_DIR="$PROJECT_ROOT/archived/proxy-printer-backups"
+mkdir -p "$BACKUP_DIR"
+
+STAMP="$(date +%Y%m%d_%H%M%S)"
+BUNDLE="$BACKUP_DIR/backup_$STAMP.bundle"
+
+# Create bundle of all refs
+if command -v git >/dev/null 2>&1; then
+  git bundle create "$BUNDLE" --all || true
+  echo "[pre-push] wrote bundle: $BUNDLE"
+fi
+
+# Prune old bundles, keep last 10
+ls -1t "$BACKUP_DIR"/backup_*.bundle 2>/dev/null | tail -n +11 | xargs -I {} rm -f {} || true
+
+# Optional snapshot zip of small, important text assets
+# Skip large images/bulk data by default.
+ZIP_PATH="$BACKUP_DIR/snapshot_$STAMP.zip"
+(
+  cd "$PROJECT_ROOT"
+  ITEMS=(
+    "proxy-machine/mds"
+    "proxy-machine/assets"
+    "proxy-machine/Makefile"
+    "proxy-machine/create_pdf.py"
+    "proxy-machine/coverage.py"
+    "proxy-machine/config"
+  )
+  EXISTING=()
+  for p in "${ITEMS[@]}"; do
+    if [ -e "$p" ]; then
+      EXISTING+=("$p")
+    fi
+  done
+  if [ ${#EXISTING[@]} -gt 0 ]; then
+    zip -rq "$ZIP_PATH" "${EXISTING[@]}"
+    echo "[pre-push] wrote snapshot: $ZIP_PATH"
+  else
+    echo "[pre-push] no snapshot contents found; skipping zip."
+  fi
+)
+
+exit 0

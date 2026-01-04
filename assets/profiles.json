@@ -1,0 +1,26 @@
+{
+  "efan": {
+    "base_path": "magic-the-gathering/proxied-decks/efan/pictures-of-cards/to-print",
+    "output_path": "magic-the-gathering/proxied-decks/efan/pdfs-of-decks/efan.pdf"
+  },
+  "elijah": {
+    "base_path": "magic-the-gathering/proxied-decks/elijah/pictures-of-cards/to-print",
+    "output_path": "magic-the-gathering/proxied-decks/elijah/pdfs-of-decks/elijah.pdf"
+  },
+  "jack": {
+    "base_path": "magic-the-gathering/proxied-decks/jack/pictures-of-cards/to-print",
+    "output_path": "magic-the-gathering/proxied-decks/jack/pdfs-of-decks/jack.pdf"
+  },
+  "patrick": {
+    "base_path": "magic-the-gathering/proxied-decks/patrick/pictures-of-cards/to-print",
+    "output_path": "magic-the-gathering/proxied-decks/patrick/pdfs-of-decks/patrick.pdf"
+  },
+  "thoe": {
+    "base_path": "magic-the-gathering/proxied-decks/thoe/pictures-of-cards/to-print",
+    "output_path": "magic-the-gathering/proxied-decks/thoe/pdfs-of-decks/thoe.pdf"
+  },
+  "wyatt": {
+    "base_path": "magic-the-gathering/proxied-decks/wyatt/pictures-of-cards/to-print",
+    "output_path": "magic-the-gathering/proxied-decks/wyatt/pdfs-of-decks/wyatt.pdf"
+  }
+}

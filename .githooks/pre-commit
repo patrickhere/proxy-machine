@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Proxy Machine: pre-commit hook shim
+# Tries uv-run, then uvx, then system pre-commit. Falls through without blocking if missing.
+set -euo pipefail
+
+if command -v uv >/dev/null 2>&1; then
+  if uv run pre-commit --version >/dev/null 2>&1; then
+    uv run pre-commit run --all-files || true
+    exit 0
+  fi
+fi
+
+if command -v uvx >/dev/null 2>&1; then
+  if uvx pre-commit --version >/dev/null 2>&1; then
+    uvx pre-commit run --all-files || true
+    exit 0
+  fi
+fi
+
+if command -v pre-commit >/dev/null 2>&1; then
+  pre-commit run --all-files || true
+  exit 0
+fi
+
+echo "[pre-commit] Not installed. Run: make precommit-install" >&2
+exit 0

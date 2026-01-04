@@ -1,0 +1,18 @@
+click==8.1.8
+natsort==8.4.0
+numpy>=1.26.0,<2.0  # Python 3.9 compatible (2.x requires Python 3.10+)
+Pillow==11.3.0
+pydantic==2.11.1
+pydantic-settings==2.6.1  # For BaseSettings (moved in v2)
+Requests==2.32.3
+pypdfium2==4.30.0
+split-image==2.0.1
+Flask==3.0.3
+ImageHash==4.3.1
+opencv-python-headless==4.10.0.84
+psutil==5.9.8
+pyright[nodejs]==1.1.406
+pytest==8.3.3
+alembic==1.13.1
+loguru==0.7.2
+diskcache==5.6.3  # For query and HTTP caching
