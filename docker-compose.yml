@@ -34,6 +34,8 @@ services:
       - TAILSCALE_AUTHKEY=
       # Set a strong password for admin dashboard access
       - ADMIN_PASSWORD=
+      # Secret key for session encryption (generate with: python -c "import secrets; print(secrets.token_hex(32))")
+      - FLASK_SECRET_KEY=
 
     volumes:
       - ./data/shared:/data/shared
