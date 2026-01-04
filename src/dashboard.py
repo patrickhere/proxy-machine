@@ -55,6 +55,24 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
 # CSRF Protection
 if CSRF_AVAILABLE:
     csrf = CSRFProtect(app)
+    # Exempt API routes from CSRF (they use AJAX and don't submit forms)
+    csrf.exempt("api_profiles")
+    csrf.exempt("api_profile_decks")
+    csrf.exempt("api_profiles_decks_post")
+    csrf.exempt("api_profile_pdf")
+    csrf.exempt("api_profile_upload")
+    csrf.exempt("api_profile_import_deck")
+    csrf.exempt("api_profile_download_pdf")
+    csrf.exempt("api_coverage")
+    csrf.exempt("api_search")
+    csrf.exempt("api_search_cards")
+    csrf.exempt("api_unique_art")
+    csrf.exempt("api_unique_art_counts")
+    csrf.exempt("api_rules_delta")
+    csrf.exempt("api_db_info")
+    csrf.exempt("api_set")
+    csrf.exempt("api_rulings")
+    csrf.exempt("run_action")
 else:
     csrf = None
 
@@ -2604,19 +2622,21 @@ def api_search_cards():
         # Format results for frontend
         cards = []
         for card in results:
-            cards.append({
-                "id": card.get("id"),
-                "name": card.get("name"),
-                "image_url": card.get("image_url") or "",
-                "rarity": card.get("rarity") or "common",
-                "set": (card.get("set_code") or card.get("set") or "").upper(),
-                "set_name": card.get("set_name") or "",
-                "type_line": card.get("type_line") or "",
-                "mana_cost": card.get("mana_cost") or "",
-                "cmc": card.get("cmc"),
-                "colors": card.get("colors") or [],
-                "oracle_text": card.get("oracle_text") or "",
-            })
+            cards.append(
+                {
+                    "id": card.get("id"),
+                    "name": card.get("name"),
+                    "image_url": card.get("image_url") or "",
+                    "rarity": card.get("rarity") or "common",
+                    "set": (card.get("set_code") or card.get("set") or "").upper(),
+                    "set_name": card.get("set_name") or "",
+                    "type_line": card.get("type_line") or "",
+                    "mana_cost": card.get("mana_cost") or "",
+                    "cmc": card.get("cmc"),
+                    "colors": card.get("colors") or [],
+                    "oracle_text": card.get("oracle_text") or "",
+                }
+            )
 
         return jsonify({"cards": cards, "count": len(cards)})
 
@@ -2631,6 +2651,7 @@ NOTIFICATIONS_TEMPLATE = """
 <h1>Notification Settings</h1>
 
 <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h3>General</h3>
   Enabled: <input type="checkbox" name="enabled" value="1" {% if cfg.enabled %}checked{% endif %}><br>
 
@@ -2693,28 +2714,128 @@ ADMIN_LOGIN_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
-    <title>Admin Login</title>
+    <title>Admin Login - The Proxy Machine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; }
-        .login-box { background: #f5f5f5; padding: 30px; border-radius: 8px; }
-        h1 { margin-top: 0; }
-        input[type="password"] { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
-        button { background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
-        button:hover { background: #0056b3; }
-        .error { color: red; margin-bottom: 10px; }
-        a { color: #007bff; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e8e6e3;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+        }
+        .login-box {
+            background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            position: relative;
+        }
+        .login-box::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px; bottom: -1px;
+            background: linear-gradient(135deg, rgba(212,175,55,0.2) 0%, transparent 50%, rgba(212,175,55,0.1) 100%);
+            border-radius: 12px;
+            z-index: -1;
+        }
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            color: #D4AF37;
+            margin: 0 0 8px 0;
+            font-size: 1.75rem;
+            text-align: center;
+            letter-spacing: 0.05em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #8a8a9a;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 14px 16px;
+            margin: 0 0 16px 0;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            color: #e8e6e3;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input[type="password"]:focus {
+            outline: none;
+            border-color: rgba(212,175,55,0.5);
+            box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+        }
+        input[type="password"]::placeholder { color: #5a5a6a; }
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+            color: #0a0a0f;
+            border: none;
+            padding: 14px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.05em;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(212,175,55,0.3);
+        }
+        .error {
+            background: rgba(220,53,69,0.15);
+            border: 1px solid rgba(220,53,69,0.3);
+            color: #ff6b6b;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #8a8a9a;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #D4AF37; }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <h1>Admin Login</h1>
-        {% if error %}<p class="error">{{ error }}</p>{% endif %}
-        <form method="post">
-            <input type="password" name="password" placeholder="Admin Password" required autofocus>
-            <input type="hidden" name="next" value="{{ next_url }}">
-            <button type="submit">Login</button>
-        </form>
-        <p><a href="/">Back to Dashboard</a></p>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>Admin Portal</h1>
+            <p class="subtitle">The Proxy Machine</p>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="password" name="password" placeholder="Enter admin password" required autofocus>
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <button type="submit">Authenticate</button>
+            </form>
+            <a href="/" class="back-link">Return to Dashboard</a>
+        </div>
     </div>
 </body>
 </html>
@@ -2724,87 +2845,217 @@ ADMIN_DASHBOARD_TEMPLATE = """
 <!doctype html>
 <html>
 <head>
-    <title>Admin Dashboard</title>
+    <title>Admin Dashboard - The Proxy Machine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
-        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
-        .section { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
-        .section h2 { margin-top: 0; }
-        .btn { display: inline-block; background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; text-decoration: none; margin: 5px 5px 5px 0; }
-        .btn:hover { background: #0056b3; }
-        .btn-danger { background: #dc3545; }
-        .btn-danger:hover { background: #c82333; }
-        .btn-success { background: #28a745; }
-        .btn-success:hover { background: #218838; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: #e8e6e3;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-weight: 600;
+            color: #D4AF37;
+            font-size: 2rem;
+            margin: 0 0 30px 0;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(212,175,55,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h2 {
+            font-family: 'Cinzel', serif;
+            color: #D4AF37;
+            font-size: 1.25rem;
+            margin: 0 0 15px 0;
+            letter-spacing: 0.03em;
+        }
+        h3 {
+            font-family: 'Cinzel', serif;
+            color: #c9b896;
+            font-size: 1rem;
+            margin: 20px 0 10px 0;
+        }
+        .section {
+            background: linear-gradient(180deg, rgba(26,26,36,0.95) 0%, rgba(18,18,26,0.98) 100%);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 20px 0;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #2a2a3a 0%, #1a1a24 100%);
+            color: #e8e6e3;
+            border: 1px solid rgba(212,175,55,0.3);
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 6px;
+            text-decoration: none;
+            margin: 5px 5px 5px 0;
+            font-family: 'Cinzel', serif;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            border-color: rgba(212,175,55,0.6);
+            box-shadow: 0 4px 15px rgba(212,175,55,0.2);
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #4a2020 0%, #2a1515 100%);
+            border-color: rgba(220,53,69,0.4);
+        }
+        .btn-danger:hover { border-color: rgba(220,53,69,0.7); box-shadow: 0 4px 15px rgba(220,53,69,0.2); }
+        .btn-success {
+            background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+            color: #0a0a0f;
+            border-color: transparent;
+        }
+        .btn-success:hover { box-shadow: 0 4px 15px rgba(212,175,55,0.4); }
         table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-        th { background: #e9ecef; }
-        .status { padding: 3px 8px; border-radius: 3px; font-size: 0.9em; }
-        .status-ok { background: #d4edda; color: #155724; }
-        .status-warn { background: #fff3cd; color: #856404; }
-        .logout { float: right; }
-        .message { padding: 10px; margin: 10px 0; border-radius: 4px; }
-        .message-success { background: #d4edda; color: #155724; }
-        .message-error { background: #f8d7da; color: #721c24; }
+        th, td {
+            text-align: left;
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        th {
+            background: rgba(212,175,55,0.1);
+            font-family: 'Cinzel', serif;
+            font-size: 0.85rem;
+            color: #D4AF37;
+            letter-spacing: 0.05em;
+        }
+        td { color: #c9b896; font-size: 0.95rem; }
+        .status {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-family: 'Cinzel', serif;
+        }
+        .status-ok {
+            background: rgba(40,167,69,0.2);
+            color: #6fdc8c;
+            border: 1px solid rgba(40,167,69,0.3);
+        }
+        .status-warn {
+            background: rgba(255,193,7,0.2);
+            color: #ffc107;
+            border: 1px solid rgba(255,193,7,0.3);
+        }
+        .message {
+            padding: 14px 18px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+        .message-success {
+            background: rgba(40,167,69,0.15);
+            border: 1px solid rgba(40,167,69,0.3);
+            color: #6fdc8c;
+        }
+        .message-error {
+            background: rgba(220,53,69,0.15);
+            border: 1px solid rgba(220,53,69,0.3);
+            color: #ff6b6b;
+        }
+        input[type="text"] {
+            padding: 10px 14px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 6px;
+            color: #e8e6e3;
+            font-family: inherit;
+            font-size: 0.95rem;
+            margin-right: 10px;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: rgba(212,175,55,0.5);
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #8a8a9a;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #D4AF37; }
     </style>
 </head>
 <body>
-    <h1>Admin Dashboard <a href="{{ url_for('admin_logout') }}" class="btn btn-danger logout">Logout</a></h1>
+    <div class="container">
+        <h1>
+            <span>Admin Dashboard</span>
+            <a href="{{ url_for('admin_logout') }}" class="btn btn-danger">Logout</a>
+        </h1>
 
-    {% if message %}
-    <div class="message message-{{ message_type or 'success' }}">{{ message }}</div>
-    {% endif %}
+        {% if message %}
+        <div class="message message-{{ message_type or 'success' }}">{{ message }}</div>
+        {% endif %}
 
-    <div class="section">
-        <h2>Database</h2>
-        <table>
-            <tr><th>Metric</th><th>Value</th></tr>
-            <tr><td>Total Prints</td><td>{{ db_info.prints or 0 }}</td></tr>
-            <tr><td>Unique Artworks</td><td>{{ db_info.unique_artworks or 0 }}</td></tr>
-            <tr><td>Schema Version</td><td>{{ db_info.schema_version or 'N/A' }}</td></tr>
-            <tr><td>FTS5 Enabled</td><td><span class="status {{ 'status-ok' if db_info.fts5 else 'status-warn' }}">{{ 'Yes' if db_info.fts5 else 'No' }}</span></td></tr>
-        </table>
-        <form method="post" action="{{ url_for('admin_sync_db') }}" style="display:inline;">
-            <button type="submit" class="btn btn-success">Sync Database</button>
-        </form>
-        <a href="{{ url_for('admin_db_maintenance_protected') }}?allow_download=1" class="btn">Refresh Index (with download)</a>
+        <div class="section">
+            <h2>Database</h2>
+            <table>
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Prints</td><td>{{ db_info.prints or 0 }}</td></tr>
+                <tr><td>Unique Artworks</td><td>{{ db_info.unique_artworks or 0 }}</td></tr>
+                <tr><td>Schema Version</td><td>{{ db_info.schema_version or 'N/A' }}</td></tr>
+                <tr><td>FTS5 Enabled</td><td><span class="status {{ 'status-ok' if db_info.fts5 else 'status-warn' }}">{{ 'Yes' if db_info.fts5 else 'No' }}</span></td></tr>
+            </table>
+            <form method="post" action="{{ url_for('admin_sync_db') }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-success">Sync Database</button>
+            </form>
+            <a href="{{ url_for('admin_db_maintenance_protected') }}?allow_download=1" class="btn">Refresh Index</a>
+        </div>
+
+        <div class="section">
+            <h2>Profiles</h2>
+            <table>
+                <tr><th>Profile</th><th>Decks</th><th>Actions</th></tr>
+                {% for profile in profiles %}
+                <tr>
+                    <td>{{ profile.name }}</td>
+                    <td>{{ profile.deck_count }}</td>
+                    <td>
+                        <a href="{{ url_for('admin_view_profile', name=profile.name) }}" class="btn" style="padding: 6px 12px;">View</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="color: #5a5a6a;">No profiles found</td></tr>
+                {% endfor %}
+            </table>
+            <h3>Create New Profile</h3>
+            <form method="post" action="{{ url_for('admin_create_profile') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="profile_name" placeholder="Profile name" required>
+                <button type="submit" class="btn btn-success">Create Profile</button>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>System Info</h2>
+            <table>
+                <tr><th>Setting</th><th>Value</th></tr>
+                <tr><td>Tailscale</td><td><span class="status {{ 'status-ok' if tailscale_enabled else 'status-warn' }}">{{ 'Enabled' if tailscale_enabled else 'Disabled' }}</span></td></tr>
+                <tr><td>Shared Root</td><td>{{ shared_root }}</td></tr>
+                <tr><td>Profiles Root</td><td>{{ profiles_root }}</td></tr>
+                <tr><td>Bulk Data Dir</td><td>{{ bulk_data_dir }}</td></tr>
+            </table>
+        </div>
+
+        <a href="/" class="back-link">Return to Dashboard</a>
     </div>
-
-    <div class="section">
-        <h2>Profiles</h2>
-        <table>
-            <tr><th>Profile</th><th>Decks</th><th>Actions</th></tr>
-            {% for profile in profiles %}
-            <tr>
-                <td>{{ profile.name }}</td>
-                <td>{{ profile.deck_count }}</td>
-                <td>
-                    <a href="{{ url_for('admin_view_profile', name=profile.name) }}" class="btn" style="padding: 5px 10px;">View</a>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="3">No profiles found</td></tr>
-            {% endfor %}
-        </table>
-        <h3>Create New Profile</h3>
-        <form method="post" action="{{ url_for('admin_create_profile') }}">
-            <input type="text" name="profile_name" placeholder="Profile name" required>
-            <button type="submit" class="btn btn-success">Create Profile</button>
-        </form>
-    </div>
-
-    <div class="section">
-        <h2>System Info</h2>
-        <table>
-            <tr><th>Setting</th><th>Value</th></tr>
-            <tr><td>Tailscale</td><td><span class="status {{ 'status-ok' if tailscale_enabled else 'status-warn' }}">{{ 'Enabled' if tailscale_enabled else 'Disabled' }}</span></td></tr>
-            <tr><td>Shared Root</td><td>{{ shared_root }}</td></tr>
-            <tr><td>Profiles Root</td><td>{{ profiles_root }}</td></tr>
-            <tr><td>Bulk Data Dir</td><td>{{ bulk_data_dir }}</td></tr>
-        </table>
-    </div>
-
-    <p><a href="/">Back to Dashboard</a></p>
 </body>
 </html>
 """
