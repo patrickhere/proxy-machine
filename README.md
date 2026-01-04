@@ -308,6 +308,7 @@ MIT License - See LICENSE file for details
 
 ## Credits
 
+- **Original Concept** - Based on [silhouette-card-maker](https://github.com/Alan-Cha/silhouette-card-maker) by [Alan Cha](https://github.com/Alan-Cha)
 - **Built with Claude Code** - AI-assisted development and vibe-coding
 - **Scryfall API** - Card data and images
 - **Community Contributors** - Testing, feedback, and improvements
