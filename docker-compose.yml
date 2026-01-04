@@ -12,50 +12,32 @@ services:
       - /dev/net/tun:/dev/net/tun
 
     ports:
-      - "5001:5001"  # Web dashboard
+      - "5001:5001"
 
     environment:
-      # Application settings
       - WEB_HOST=0.0.0.0
       - WEB_PORT=5001
       - LOG_LEVEL=INFO
-
-      # Performance settings
       - MAX_DOWNLOAD_WORKERS=8
       - DEFAULT_PPI=600
       - DB_CACHE_SIZE_MB=200
-
-      # Path configuration (mapped to volumes below)
       - PROXY_MACHINE_ROOT=/app
       - SHARED_ROOT=/data/shared
       - PROFILES_ROOT=/data/profiles
       - BULK_DATA_DIR=/data/bulk-data
       - REPORTS_DIR=/data/shared/reports
       - PDF_OUTPUT_DIR=/data/pdfs
-
-      # Tailscale configuration
       - TAILSCALE_ENABLED=true
-      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
-      - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-proxy-machine}
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY}
+      - TAILSCALE_HOSTNAME=proxy-machine
 
     volumes:
-      # Shared card library (symlink target)
-      - ${SHARED_ROOT:-./data/shared}:/data/shared
-
-      # User profiles (deck lists, PDFs, etc.)
-      - ${PROFILES_ROOT:-./data/profiles}:/data/profiles
-
-      # Bulk data (Scryfall database - 3GB+)
-      - ${BULK_DATA_DIR:-./data/bulk-data}:/data/bulk-data
-
-      # Generated PDFs
-      - ${PDF_OUTPUT_DIR:-./data/pdfs}:/data/pdfs
-
-      # Logs
-      - ${LOGS_DIR:-./data/logs}:/app/logs
-
-      # Tailscale state (persistent)
-      - ${TAILSCALE_STATE:-./data/tailscale}:/var/lib/tailscale
+      - ./data/shared:/data/shared
+      - ./data/profiles:/data/profiles
+      - ./data/bulk-data:/data/bulk-data
+      - ./data/pdfs:/data/pdfs
+      - ./data/logs:/app/logs
+      - ./data/tailscale:/var/lib/tailscale
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/"]
@@ -63,10 +45,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
-
-    networks:
-      - proxy-machine-net
-
-networks:
-  proxy-machine-net:
-    driver: bridge
