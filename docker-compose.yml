@@ -1,9 +1,6 @@
-version: '3.8'
-
 services:
   proxy-machine:
-    build: .
-    image: proxy-machine:latest
+    image: ghcr.io/patrickhere/proxy-machine:latest
     container_name: proxy-machine
     restart: unless-stopped
 
@@ -36,8 +33,8 @@ services:
       - REPORTS_DIR=/data/shared/reports
       - PDF_OUTPUT_DIR=/data/pdfs
 
-      # Tailscale configuration (optional)
-      - TAILSCALE_ENABLED=false
+      # Tailscale configuration
+      - TAILSCALE_ENABLED=true
       - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
       - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-proxy-machine}
 
