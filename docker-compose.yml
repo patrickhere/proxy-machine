@@ -3,33 +3,63 @@ version: '3.8'
 services:
   proxy-machine:
     build: .
+    image: proxy-machine:latest
     container_name: proxy-machine
-    ports:
-      - "5001:5001"
-    volumes:
-      # Persistent data volumes
-      - ./data/shared:/data/shared
-      - ./data/profiles:/data/profiles
-      - ./data/bulk-data:/data/bulk-data
+    restart: unless-stopped
 
-      # Optional: Mount local code for development
-      # - .:/app
+    # Required for Tailscale
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    ports:
+      - "5001:5001"  # Web dashboard
+
     environment:
-      # Path configuration
+      # Application settings
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=5001
+      - LOG_LEVEL=INFO
+
+      # Performance settings
+      - MAX_DOWNLOAD_WORKERS=8
+      - DEFAULT_PPI=600
+      - DB_CACHE_SIZE_MB=200
+
+      # Path configuration (mapped to volumes below)
       - PROXY_MACHINE_ROOT=/app
       - SHARED_ROOT=/data/shared
       - PROFILES_ROOT=/data/profiles
       - BULK_DATA_DIR=/data/bulk-data
-      - DATABASE_PATH=/data/bulk-data/bulk-index.db
+      - REPORTS_DIR=/data/shared/reports
+      - PDF_OUTPUT_DIR=/data/pdfs
 
-      # Web server
-      - WEB_HOST=0.0.0.0
-      - WEB_PORT=5001
+      # Tailscale configuration (optional)
+      - TAILSCALE_ENABLED=false
+      - TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+      - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-proxy-machine}
 
-      # Optional: Tailscale (future feature)
-      # - TAILSCALE_ENABLED=true
-      # - TAILSCALE_HOSTNAME=proxy-machine
-    restart: unless-stopped
+    volumes:
+      # Shared card library (symlink target)
+      - ${SHARED_ROOT:-./data/shared}:/data/shared
+
+      # User profiles (deck lists, PDFs, etc.)
+      - ${PROFILES_ROOT:-./data/profiles}:/data/profiles
+
+      # Bulk data (Scryfall database - 3GB+)
+      - ${BULK_DATA_DIR:-./data/bulk-data}:/data/bulk-data
+
+      # Generated PDFs
+      - ${PDF_OUTPUT_DIR:-./data/pdfs}:/data/pdfs
+
+      # Logs
+      - ${LOGS_DIR:-./data/logs}:/app/logs
+
+      # Tailscale state (persistent)
+      - ${TAILSCALE_STATE:-./data/tailscale}:/var/lib/tailscale
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/"]
       interval: 30s
@@ -37,8 +67,9 @@ services:
       retries: 3
       start_period: 5s
 
-# For Unraid deployment, use these volume mappings instead:
-# volumes:
-#   - /mnt/user/appdata/proxy-machine/shared:/data/shared
-#   - /mnt/user/appdata/proxy-machine/profiles:/data/profiles
-#   - /mnt/user/appdata/proxy-machine/bulk-data:/data/bulk-data
+    networks:
+      - proxy-machine-net
+
+networks:
+  proxy-machine-net:
+    driver: bridge
