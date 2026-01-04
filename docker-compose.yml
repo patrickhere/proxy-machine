@@ -12,7 +12,7 @@ services:
       - /dev/net/tun:/dev/net/tun
 
     ports:
-      - "5001:5001"
+      - "0.0.0.0:5001:5001"
 
     environment:
       - WEB_HOST=0.0.0.0
