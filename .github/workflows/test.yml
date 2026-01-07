@@ -10,6 +10,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      PYTHONPATH: src
+
     steps:
     - uses: actions/checkout@v4
 
@@ -38,9 +41,9 @@ jobs:
 
     - name: Run integration tests
       run: |
-        uv run pytest tests/test_integration.py -v
+        uv run pytest src/tests/test_integration.py -v
 
     - name: Run benchmarks
       run: |
-        uv run python tests/benchmarks/run_benchmarks.py
+        uv run python src/tests/benchmarks/run_benchmarks.py
       continue-on-error: true
