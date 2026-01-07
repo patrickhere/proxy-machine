@@ -24,8 +24,10 @@ import time
 import tracemalloc
 from pathlib import Path
 
-# Add parent to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src and repo root to path for imports
+repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(repo_root / "src"))
+sys.path.insert(0, str(repo_root))
 
 # Test results tracking
 tests_passed = 0
@@ -94,7 +96,7 @@ def test_golden_fixtures():
     """Test 2: Golden dataset fixtures."""
     print_header("Test 2: Golden Dataset Fixtures")
 
-    fixtures_dir = Path("tests/data/fixtures")
+    fixtures_dir = Path("src/tests/data/fixtures")
 
     # Check directory exists
     if not fixtures_dir.exists():
@@ -185,7 +187,7 @@ def test_integration_tests():
     """Test 4: Integration tests."""
     print_header("Test 4: Integration Tests")
 
-    test_file = Path("tests/test_integration.py")
+    test_file = Path("src/tests/test_integration.py")
 
     if not test_file.exists():
         print_test("Integration test file", "FAIL", "File not found")
@@ -236,7 +238,7 @@ def test_alembic_migrations():
     """Test 6: Alembic migrations."""
     print_header("Test 6: Alembic Schema Migrations")
 
-    migrations_dir = Path("db/migrations")
+    migrations_dir = Path("src/db/migrations")
 
     if not migrations_dir.exists():
         print_test("Migrations directory", "FAIL", "Directory not found")
